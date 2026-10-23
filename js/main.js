@@ -1,4 +1,4 @@
-// Duskhold: the client. Draws the camp and the dungeons, runs your hero, the monsters, skills, loot and every screen.
+﻿// Duskhold: the client. Draws the camp and the dungeons, runs your hero, the monsters, skills, loot and every screen.
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -9,7 +9,7 @@ import { CLASSES, SKILLS, SKILL_ORDER, TREES, MAX_SKILL, MAX_LEVEL, xpFor, DIFFS
 import { rollItem, makeItem, potionFor, itemValue, rng, newUid } from './loot.js?v=4';
 import { derive, setCount, attackDamage, spellDamage, hitChance, mobHitChance, takeDamage } from './combat.js?v=4';
 import { genLevel, genTown, collide, field, stepOn, sees, walkAt, toT, toW, TS, FLOOR, WALL, PILLAR } from './dungeon.js?v=4';
-import { makeHero, makeMob, animate, makeProp, makeNPC, mat, glow, OUTLINE, GRAD } from './models.js?v=4';
+import { makeHero, makeMob, animate, makeProp, makeNPC, mat, glow, OUTLINE, GRAD } from './models.js?v=5';
 import { sfx } from './audio.js?v=4';
 import { STR } from './text.js?v=4';
 

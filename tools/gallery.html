@@ -1,0 +1,29 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Duskhold model gallery</title>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
+<style>body { margin: 0; background: #2a2230; } canvas { display: block; }</style></head>
+<body><canvas id="cv"></canvas>
+<script type="module">
+// every hero (bare and fully geared) and every monster in rows, to look at the models: tools/gallery.html?row=heroes|mobs
+import * as THREE from 'three';
+import { makeHero, makeMob, animate } from '../js/models.js?v=5';
+const row = new URLSearchParams(location.search).get('row') || 'heroes', W = innerWidth, H = innerHeight;
+const r = new THREE.WebGLRenderer({ canvas: document.getElementById('cv'), antialias: true }); r.setSize(W, H); r.setPixelRatio(1);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#3a3040');
+scene.add(new THREE.HemisphereLight('#fff2d8', '#4a3a2a', 1.1)); const sun = new THREE.DirectionalLight('#fff0d8', 1.6); sun.position.set(3, 6, 5); scene.add(sun);
+const cam = new THREE.PerspectiveCamera(30, W / H, 0.1, 200);
+const it = (base) => ({ base, st: {} });
+const gear = (w, o) => ({ head: it('helm'), body: it('plate'), gloves: it('gauntlets'), boots: it('greaves'), belt: it('war_belt'), weapon: it(w), offhand: o ? it(o) : null, amulet: it('amulet') });
+const list = [];
+if (row === 'heroes') {
+  for (const c of ['warrior', 'ranger', 'sorc', 'druid', 'necro']) list.push(makeHero(c, { weapon: it({ warrior: 'broad_sword', ranger: 'long_bow', sorc: 'staff', druid: 'club', necro: 'wand' }[c]) }));
+  list.push(makeHero('warrior', gear('rune_sword', 'kite')), makeHero('ranger', { ...gear('war_bow'), head: it('cap'), body: it('chain') }), makeHero('sorc', { weapon: it('elder_staff'), head: it('crown'), body: it('quilted'), gloves: it('gloves'), boots: it('boots') }), makeHero('warrior', { ...gear('war_axe', 'tower'), head: it('crown') }));
+} else for (const id of (row === 'mobs' ? ['skeleton', 'archer', 'zombie', 'mummy', 'imp', 'fireimp', 'naga', 'knight', 'wraith'] : ['bat', 'scarab', 'hound', 'boneking', 'queen', 'lord'])) list.push(makeMob(id));
+const gap = row === 'bosses' ? 4.2 : 1.6;
+list.forEach((m, i) => { m.position.set((i - (list.length - 1) / 2) * gap, 0, 0); m.rotation.y = 0.35; scene.add(m); });
+const span = list.length * gap; cam.position.set(0, row === 'bosses' ? 4 : 1.6, span * 0.9 + 2); cam.lookAt(0, row === 'bosses' ? 2.2 : 1.05, 0);
+let t = 0; const act = new URLSearchParams(location.search).get('act') || '';
+function frame() { t += 1 / 30; for (const m of list) animate(m, 1 / 30, act === 'walk' ? 1 : 0, act === 'attack' ? 'attack' : '', act === 'attack' ? (t % 0.8) : 0, 0.8, 0); r.render(scene, cam); requestAnimationFrame(frame); }
+frame();
+window.ready = true;
+</script></body></html>

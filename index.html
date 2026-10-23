@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='8' fill='%231a1418'/%3E%3Cpath d='M10.5 3a5 5 0 1 0 2.5 8.5A4 4 0 0 1 10.5 3z' fill='%23e8c070'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Noto+Serif+TC:wght@700;900&family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=4">
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
 </head>
 <body>
@@ -20,6 +20,7 @@
   <div id="area"></div>
   <canvas id="mini" width="150" height="150"></canvas>
   <div id="foe" hidden><b id="foeName"></b><small id="foeMods"></small><div class="bar"><i id="foeFill"></i></div></div>
+  <div id="buffs"></div>
   <div id="bottom">
     <div class="orb life"><i id="lifeFill"></i><span id="lifeTxt"></span></div>
     <div class="mid">
@@ -37,7 +38,7 @@
   <div id="banner"></div>
   <div id="toasts"></div>
   <div id="stick"><div id="knob"></div></div>
-  <div id="touchBtns"><button id="tH">🧪</button><button id="tM">🧴</button><button id="tTP">📜</button><button id="tQ"></button><button id="tE"></button><button id="tR"></button><button id="tF"></button><button id="tatk">⚔️</button></div>
+  <div id="touchBtns"><button id="tH">🧪</button><button id="tM">🧴</button><button id="tTP">📜</button><button id="tQ"></button><button id="tE"></button><button id="tR"></button><button id="tF"></button><button id="tG"></button><button id="tH"></button><button id="tatk">⚔️</button></div>
 </div>
 
 <div id="win" class="screen" hidden><div class="panel"><div class="head"><h2 id="winTitle"></h2><button id="winX" class="x">✕</button></div><div id="winBody"></div></div></div>
@@ -57,7 +58,7 @@
   </div>
 </div>
 
-<script type="module" src="js/main.js?v=3"></script>
+<script type="module" src="js/main.js?v=4"></script>
 <script src="/hub.js" data-pos="top-left" defer></script>
 </body>
 </html>

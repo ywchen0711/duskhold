@@ -93,7 +93,7 @@ button.ghost, .row button, .tabs button { border: 2px solid var(--gold2); border
 .charcard { display: flex; align-items: center; gap: 10px; background: rgba(0, 0, 0, .25); border: 1px solid var(--gold2); border-radius: 12px; padding: 6px 10px; }
 .charcard .ic { font-size: 30px; } .charcard div { flex: 1; } .charcard small { display: block; color: var(--muted); font-weight: 800; }
 .charcard .go { border: 2px solid var(--line); border-radius: 10px; background: linear-gradient(#ffe0a0, var(--gold)); color: #1a0a06; font-weight: 900; padding: 6px 14px; }
-#sClasses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+#sClasses { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
 #sClasses button { min-width: 0; border: 2px solid var(--stone2); border-radius: 14px; background: rgba(0, 0, 0, .25); padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
 #sClasses button.sel { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold2); background: rgba(232, 192, 112, .12); }
 #sClasses .ic { font-size: 34px; } #sClasses b { font-family: "Noto Serif TC", serif; color: var(--gold); } #sClasses small { color: var(--muted); font-weight: 700; font-size: 12px; }
@@ -132,3 +132,16 @@ hr { border: 0; border-top: 1px solid rgba(232, 192, 112, .25); margin: 6px 0; }
 
 /* a controller's highlight in menus */
 .padfocus { outline: 3px solid var(--gold) !important; outline-offset: 2px; box-shadow: 0 0 14px rgba(232, 192, 112, .8) !important; position: relative; z-index: 1; }
+
+/* buffs, skill trees, six skill slots */
+#buffs { position: absolute; left: 50%; top: 44px; transform: translateX(-50%); flex-wrap: wrap; justify-content: center; max-width: 60vw; pointer-events: none; display: flex; gap: 4px; }
+#buffs span { position: relative; width: 30px; height: 30px; display: grid; place-items: center; background: rgba(10, 6, 8, .7); border: 1px solid var(--gold2); border-radius: 8px; font-size: 16px; }
+#buffs small { position: absolute; right: 1px; bottom: -2px; font-size: 9px; font-weight: 900; color: #fff; text-shadow: 0 1px 1px #000; }
+#skillbar button { width: 44px; height: 44px; font-size: 21px; }
+.tabs { flex-wrap: wrap; }
+.tabs button small { color: var(--gold); }
+.sk { padding: 6px 10px; } .sk p { font-size: 12px; } .sk .ic { font-size: 26px; }
+.acts { max-width: 210px; }
+.acts button { width: 28px; height: 28px; font-size: 12px; }
+#touchBtns { grid-template-columns: repeat(4, 54px); }
+#touchBtns button { width: 54px; height: 54px; }

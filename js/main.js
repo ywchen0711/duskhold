@@ -5,13 +5,13 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { CLASSES, SKILLS, SKILL_ORDER, MAX_SKILL, MAX_LEVEL, xpFor, DIFFS, ACTS, mlvlOf, MOBS, mobStats, MODS, UNAME, UNAME2, BASES, STAT_NAMES, RARITY, POTIONS, SLOTS, SLOT_NAMES } from './data.js?v=2';
-import { rollItem, makeItem, potionFor, itemValue, rng, newUid } from './loot.js?v=2';
-import { derive, attackDamage, hitChance, mobHitChance, takeDamage } from './combat.js?v=2';
-import { genLevel, genTown, collide, field, stepOn, sees, walkAt, toT, toW, TS, FLOOR, WALL, PILLAR } from './dungeon.js?v=2';
-import { makeHero, makeMob, animate, makeProp, makeNPC, mat, glow, OUTLINE, GRAD } from './models.js?v=2';
-import { sfx } from './audio.js?v=2';
-import { STR } from './text.js?v=2';
+import { CLASSES, SKILLS, SKILL_ORDER, TREES, MAX_SKILL, MAX_LEVEL, xpFor, DIFFS, ACTS, mlvlOf, MOBS, mobStats, MODS, UNAME, UNAME2, BASES, STAT_NAMES, RARITY, POTIONS, SLOTS, SLOT_NAMES } from './data.js?v=3';
+import { rollItem, makeItem, potionFor, itemValue, rng, newUid } from './loot.js?v=3';
+import { derive, attackDamage, spellDamage, hitChance, mobHitChance, takeDamage } from './combat.js?v=3';
+import { genLevel, genTown, collide, field, stepOn, sees, walkAt, toT, toW, TS, FLOOR, WALL, PILLAR } from './dungeon.js?v=3';
+import { makeHero, makeMob, animate, makeProp, makeNPC, mat, glow, OUTLINE, GRAD } from './models.js?v=3';
+import { sfx } from './audio.js?v=3';
+import { STR } from './text.js?v=3';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -29,10 +29,10 @@ const changed = () => { saveT = 1; };
 const tr = () => STR[SV.lang] || STR.en;
 const tx = (p) => (p ? p[SV.lang === 'zh' ? 0 : 1] : '');
 function newChar(name, cls) {
-  const c = { id: newUid(), name, cls, lvl: 1, xp: 0, pts: 0, spts: 1, alloc: { str: 0, dex: 0, vit: 0, ene: 0 }, skills: {}, keys: { Q: null, E: null, R: null, F: null }, rmb: null,
+  const c = { id: newUid(), name, cls, lvl: 1, xp: 0, pts: 0, spts: 1, alloc: { str: 0, dex: 0, vit: 0, ene: 0 }, skills: {}, keys: { Q: null, E: null, R: null, F: null, G: null, H: null }, rmb: null,
     equip: {}, inv: [], stash: [], gold: 80, pots: { hp1: 4, mp1: 3 }, tp: 3, wps: { '0-0-0': 1 }, diff: 0, maxDiff: 0, act: 0, created: Date.now() };
-  const first = SKILL_ORDER[cls][0]; c.skills[first] = 1; c.spts = 0; c.keys.Q = first; c.rmb = first;
-  const w = { warrior: 'short_sword', ranger: 'short_bow', sorc: 'wand' }[cls];
+  const first = TREES[cls][0].skills.find((id) => SKILLS[id].req <= 1 && !['passive', 'buff'].includes(SKILLS[id].kind)) || TREES[cls][0].skills[0]; c.skills[first] = 1; c.spts = 1; c.keys.Q = first; c.rmb = first;
+  const w = { warrior: 'short_sword', ranger: 'short_bow', sorc: 'wand', druid: 'club', necro: 'wand' }[cls];
   c.equip.weapon = makeItem(w, 'normal', 1); c.equip.body = makeItem('quilted', 'normal', 1);
   if (cls === 'warrior') c.equip.offhand = makeItem('buckler', 'normal', 1);
   return c;
@@ -81,7 +81,7 @@ const THEMES = {
   temple: { floor: ['#8a7a5a', '#94845e'], wall: '#5a6a5a', fog: '#0a1210', fogN: 16, fogF: 38, hemi: 0.45, sun: 0.35, sky: '#0a1210' },
   abyss: { floor: ['#4a2a22', '#542e24'], wall: '#3a1a18', fog: '#1a0806', fogN: 16, fogF: 38, hemi: 0.45, sun: 0.4, sky: '#1a0806' },
 };
-const G = { area: null, act: 0, depth: 0, L: null, group: null, mobs: [], shots: [], fx: [], drops: [], props: [], torches: [], walls: null, explored: null, key: '', field: null, fieldT: 0, portal: null, townPortal: null, levels: new Map(), stairs: null, up: null, wp: null, theme: 'town', bossDead: false, exitPortal: null };
+const G = { allies: [], area: null, act: 0, depth: 0, L: null, group: null, mobs: [], shots: [], fx: [], drops: [], props: [], torches: [], walls: null, explored: null, key: '', field: null, fieldT: 0, portal: null, townPortal: null, levels: new Map(), stairs: null, up: null, wp: null, theme: 'town', bossDead: false, exitPortal: null };
 const ch = () => SV.chars[SV.cur];
 let C = null, ST = null;          // the current character and their derived stats
 const me = { x: 0, z: 0, yaw: 0, yawT: 0, ramp: 0, actDur: 0.5, hitK: 0, queue: [], life: 1, mana: 1, mesh: null, moveTo: null, path: null, target: null, act: '', actT: 0, atkT: 0, cds: {}, buffs: {}, whirl: 0, leap: null, regenT: 0, dead: false, speed: 0, potHeal: 0, potMana: 0, inv: 0 };
@@ -102,6 +102,7 @@ function clearArea() {
   for (const m of G.mobs) m.tag && m.tag.remove();
   for (const d of G.drops) d.tag && d.tag.remove();
   G.group = new THREE.Group(); scene.add(G.group); G.torches = [];
+  for (const a of G.allies) a.mesh = null;
 }
 function buildScene(L, th) {
   clearArea();
@@ -164,7 +165,7 @@ function enterLevel(act, depth, how = 'down') {
   buildScene(st.L, ACTS[act].theme);
   if (!st.mobs) st.mobs = spawnMobs(st.L, act, depth, c.diff);
   G.mobs = st.mobs; G.drops = st.drops;
-  for (const m of G.mobs) if (m.alive) addMobMesh(m);
+  for (const m of G.mobs) if (m.alive || m.corpse) { addMobMesh(m); if (!m.alive) { m.mesh.rotation.z = 1.5; m.mesh.position.y = -0.4; m.dieT = 0; } }
   for (const d of G.drops) addDropMesh(d);
   G.props = st.L.props.map((p, i) => { const m = makeProp(p.kind); m.position.set(p.x, 0, p.z); G.group.add(m); return { ...p, i, mesh: m, done: st.opened.has(i) }; });
   for (const p of G.props) if (p.done) { if (p.kind === 'chest') p.mesh.traverse((o) => { if (o.userData.lid) o.rotation.x = -1.2; }); else p.mesh.visible = false; }
@@ -239,8 +240,11 @@ function damageMob(m, amt, el = 'phys', opts = {}) {
   let d = amt;
   if (el === 'phys' && m.mods.includes('stone')) d *= 0.6;
   if (el !== 'phys' && m.el === el) d *= 0.5;
+  if (m.cu && m.cu.amp) d *= 1 + m.cu.amp.v / 100;
+  if (el === 'poison' && !opts.dot) { m.dots = m.dots || []; m.dots.push({ dps: d * 0.6 / 2, t: 2, el }); d *= 0.4; }
   d = Math.max(1, Math.round(d));
-  m.hp -= d; m.aggro = true; m.hitT = 0.15; impact(m, opts, d);
+  m.hp -= d; m.aggro = true; m.hitT = 0.15; if (!opts.dot) impact(m, opts, d);
+  if (m.cu && m.cu.leech) me.life = Math.min(ST.life, me.life + d * m.cu.leech.v / 100);
   if (opts.slow) m.slow = Math.max(m.slow, opts.slow);
   if (opts.stun) m.stun = Math.max(m.stun, opts.stun);
   { const a = Math.atan2(m.x - me.x, m.z - me.z), push = (opts.knock || (opts.melee ? 0.25 : 0.1)) * (m.boss ? 0.2 : 1) * 7; m.kx = Math.sin(a) * push; m.kz = Math.cos(a) * push; }   // a short slide back
@@ -250,7 +254,7 @@ function damageMob(m, amt, el = 'phys', opts = {}) {
   return d;
 }
 function killMob(m) {
-  m.alive = false; m.dieT = 1; sfx.play('die');
+  m.alive = false; m.dieT = 1; m.corpse = true; sfx.play('die'); if (m.tag) m.tag.remove();
   const c = ch(), lvDiff = c.lvl - m.mlvl, k = clamp(1 - Math.max(0, lvDiff - 3) * 0.12, 0.1, 1.15);
   gainXp(Math.round(m.xp * k));
   // loot
@@ -289,7 +293,7 @@ function pickUp(d) {
 
 // ------------------------------------------------------------------ the hero
 function refreshStats() {
-  const c = ch(); ST = derive({ ...c, equip: Object.fromEntries(Object.entries(c.equip).map(([k, it]) => [k, it && it.req > c.lvl ? { ...it, lvlTooLow: true } : it])) });
+  const c = ch(); ST = derive({ ...c, buffs: Object.keys(me.buffs).filter((k) => me.buffs[k] > 0), equip: Object.fromEntries(Object.entries(c.equip).map(([k, it]) => [k, it && it.req > c.lvl ? { ...it, lvlTooLow: true } : it])) });
   me.life = Math.min(me.life, ST.life); me.mana = Math.min(me.mana, ST.mana);
 }
 function buildHero() {
@@ -302,7 +306,7 @@ function buildHero() {
 function gainXp(n) {
   const c = ch(); if (c.lvl >= MAX_LEVEL) return;
   c.xp += n;
-  while (c.lvl < MAX_LEVEL && c.xp >= xpFor(c.lvl)) { c.xp -= xpFor(c.lvl); c.lvl++; c.pts += 5; c.spts += 1; refreshStats(); me.life = ST.life; me.mana = ST.mana; banner(tr().levelUp(c.lvl)); sfx.play('levelup'); ring(me.x, me.z, '#ffe25a', 3); }
+  while (c.lvl < MAX_LEVEL && c.xp >= xpFor(c.lvl)) { c.xp -= xpFor(c.lvl); c.lvl++; c.pts += 5; c.spts += 2; refreshStats(); me.life = ST.life; me.mana = ST.mana; banner(tr().levelUp(c.lvl)); sfx.play('levelup'); ring(me.x, me.z, '#ffe25a', 3); }
   changed();
 }
 function hurtMe(dmg, el, from) {
@@ -310,7 +314,9 @@ function hurtMe(dmg, el, from) {
   if (ST.dodge && rnd() * 100 < ST.dodge) { floatText(me.x, me.z, 'Dodge', '#9affc8'); return; }
   if (ST.block && !el && rnd() * 100 < ST.block * 0.8) { floatText(me.x, me.z, 'Block', '#c8d8ff'); sfx.play('thud'); return; }
   let d = takeDamage(ST, dmg, el && el !== 'phys' ? el : null);
-  if (me.buffs.shield > 0) { const k = SKILLS.shield.absorb(ST.sl('shield') || 1) / 100, a = Math.min(me.mana, d * k); me.mana -= a; d -= a; }
+  const ab = Math.max(me.buffs.shield > 0 ? SKILLS.shield.absorb(ST.sl('shield') || 1) : 0, ST.absorb || 0); if (ab) { const a = Math.min(me.mana, d * ab / 100); me.mana -= a; d -= a; }
+  if (from && from.alive && ST.thorns) damageMob(from, ST.thorns, 'phys', { dot: true });
+  if (from && from.alive && ST.chill) from.slow = Math.max(from.slow, 1.5);
   me.life -= d; me.hitT = 0.2; me.hitK = 1; shake = Math.max(shake, 0.3); rumble(0.9, 0.18); sfx.play('hit'); flash();
   if (me.life <= 0) die();
 }
@@ -329,8 +335,8 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Escape') { closeWin(); return; }
   if (e.code === 'KeyI') toggleWin('inv'); if (e.code === 'KeyC') toggleWin('char'); if (e.code === 'KeyK') toggleWin('skills');
   if (e.code === 'Tab') { e.preventDefault(); bigMap = !bigMap; }
-  if (winOpen() && !['KeyQ', 'KeyE', 'KeyR', 'KeyF', 'Digit1', 'Digit2', 'Digit3'].includes(e.code)) return;
-  if (['KeyQ', 'KeyE', 'KeyR', 'KeyF'].includes(e.code)) { const id = ch().keys[e.code.slice(3)]; if (id) { ch().rmb = id; castAtCursor(id); drawHud(true); } }
+  if (winOpen() && !['KeyQ', 'KeyE', 'KeyR', 'KeyF', 'KeyG', 'KeyH', 'Digit1', 'Digit2', 'Digit3'].includes(e.code)) return;
+  if (['KeyQ', 'KeyE', 'KeyR', 'KeyF', 'KeyG', 'KeyH'].includes(e.code)) { const id = ch().keys[e.code.slice(3)]; if (id) { ch().rmb = id; castAtCursor(id); drawHud(true); } }
   if (e.code === 'Digit1') drink('hp'); if (e.code === 'Digit2') drink('mp'); if (e.code === 'Digit3') drink('rejuv');
   if (e.code === 'KeyT') townPortal();
 });
@@ -376,7 +382,7 @@ const nearestMob = (r = 14) => { let b = null, bd = r; for (const m of G.mobs) {
 let touchHold = null;
 const holdingAttack = () => (!isTouch && mouse.down) || pad.attacking || touchHold !== null;
 function touchSkill(k, e) { const id = k === 'atk' ? null : ch().keys[k]; const m = nearestMob(); if (!id) { if (m) { me.target = m; touchHold = e ? e.pointerId : null; } return; } ch().rmb = id; const [x, z] = m ? [m.x, m.z] : [me.x + Math.sin(me.yaw) * 6, me.z + Math.cos(me.yaw) * 6]; cast(id, x, z, m); }
-for (const k of ['atk', 'Q', 'E', 'R', 'F']) $('t' + k).addEventListener('pointerdown', (e) => { e.preventDefault(); sfx.unlock(); touchSkill(k, e); });
+for (const k of ['atk', 'Q', 'E', 'R', 'F', 'G', 'H']) $('t' + k).addEventListener('pointerdown', (e) => { e.preventDefault(); sfx.unlock(); touchSkill(k, e); });
 $('tH').addEventListener('pointerdown', (e) => { e.preventDefault(); drink('hp'); }); $('tM').addEventListener('pointerdown', (e) => { e.preventDefault(); drink('mp'); });
 $('tTP').addEventListener('pointerdown', (e) => { e.preventDefault(); townPortal(); });
 
@@ -391,11 +397,13 @@ function cast(id, x, z, target) {
   // pressed during another swing: remember it and do it the moment that swing ends (input buffering)
   if (me.atkT > 0 || me.leap || me.whirl > 0) { me.buffer = { id, x, z, target, t: 0.6 }; return; }
   if (S.kind === 'bow' && !ST.bow) { msg(t.needBow); return; }
-  if (S.kind === 'melee' && ST.bow) { msg(t.needMelee); return; }
+  if (S.kind === 'melee' && ST.bow && !me.form) { msg(t.needMelee); return; }
+  if (S.kind === 'form' && me.form !== S.form) { msg(t.needForm(S.form)); return; }
   const cost = S.mana(lv); if (me.mana < cost) { msg(t.noMana, 700); sfx.play('fail'); return; }
   me.yaw = Math.atan2(x - me.x, z - me.z);
   const dist = Math.hypot(x - me.x, z - me.z);
-  if (id === 'bash') { if (!target || dist > reach(target) + 0.6) { me.target = target || null; me.queued = id; return; } }
+  if (id === 'bash' || S.mech === 'melee' || S.mech === 'formstrike') { if (!target || dist > reach(target) + 0.6) { me.target = target || null; me.queued = id; return; } }
+  if (S.gen) { me.mana -= cost; if (S.cd) me.cds[id] = S.cd; me.moveTo = null; me.path = null; runGen(id, S, lv, x, z, target, dist); return; }
   me.mana -= cost; if (S.cd) me.cds[id] = S.cd;
   me.moveTo = null; me.path = null;
   const atkTime = 1 / ST.aps, spellTime = 0.45;
@@ -425,6 +433,110 @@ function cast(id, x, z, target) {
   else if (id === 'meteor') { sfx.play('fire'); G.fx.push({ kind: 'meteor', x, z, r: S.r, t: 1, fire: S.fire(lv) * ST.spell, mesh: areaMarker(x, z, S.r, '#ff6a2a') }); }
   else if (id === 'shield') { me.buffs.shield = 120; sfx.play('frost'); ring(me.x, me.z, '#9ab8ff', 2); }
 }
+
+// ------------------------------------------------------------------ generated skills: each runs by its mechanic (skillgen.js)
+const EL_COL = { fire: '#ff7a2a', cold: '#8ad0ff', light: '#ffe25a', poison: '#7aff5a', phys: '#f0e6c8', magic: '#c87aff' };
+const SND = { fire: 'fire', cold: 'frost', light: 'zap', poison: 'frost', phys: 'swing', magic: 'portal' };
+function runGen(id, S, lv, x, z, target, dist) {
+  const el = S.el, col = EL_COL[el], yaw = me.yaw, dmg = () => spellDamage(ST, S, lv), t = tr();
+  switch (S.mech) {
+    case 'proj': {
+      setAct('cast', 0.45); const n = S.count(lv), base = dmg();
+      later(0.2, () => { sfx.play(SND[el]); for (let i = 0; i < n; i++) shot({ x: me.x, z: me.z, yaw: yaw + (n > 1 ? (i - (n - 1) / 2) * 0.17 : 0), speed: S.speed, from: 'p', kind: 'spell', color: col, el, sdmg: base, pierce: S.pierce, boom: S.boom ? { r: S.boom, dmg: base * 0.6, el } : null, jumps: S.jumps, homing: S.homing, slow: el === 'cold' ? 1.5 : 0 }); });
+      break;
+    }
+    case 'nova': setAct('cast', 0.45); later(0.18, () => { sfx.play('boom'); ring(me.x, me.z, col, S.r); sparksRing(me.x, me.z, S.r, col); for (const m of G.mobs) if (m.alive && Math.hypot(m.x - me.x, m.z - me.z) < S.r) damageMob(m, dmg(), el, { slow: S.slow, stun: S.stun }); }); break;
+    case 'area': setAct('cast', 0.45); sfx.play(SND[el]); G.fx.push({ kind: 'zone', x, z, r: S.r, t: S.delay + (S.ticks > 1 ? 3 : 0) + 0.4, tick: S.delay, left: S.ticks, every: S.ticks > 1 ? 3 / S.ticks : 99, dmg: dmg(), elx: el, col, mesh: areaMarker(x, z, S.r, col) }); break;
+    case 'cone': setAct('cast', 0.4); later(0.15, () => { sfx.play(SND[el]); coneFx(yaw, S.range, S.ang, col); for (const m of G.mobs) { if (!m.alive) continue; const d = Math.hypot(m.x - me.x, m.z - me.z); if (d > S.range) continue; const a = Math.atan2(m.x - me.x, m.z - me.z) - yaw; if (Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < S.ang) damageMob(m, dmg(), el, { slow: S.slow }); } }); break;
+    case 'chain': { setAct('cast', 0.4); sfx.play('zap'); let from = { x: me.x, z: me.z }, cur = target && target.alive ? target : nearestTo(x, z, 9, new Set()); const hit = new Set(); for (let j = 0; j <= S.jumps(lv) && cur; j++) { lightning(from, cur, col); damageMob(cur, dmg(), el); hit.add(cur); from = cur; cur = nearestTo(cur.x, cur.z, 7, hit); } break; }
+    case 'melee': case 'formstrike': meleeSwing(target, S.pct(lv), { stun: S.stun, cleave: S.cleave, leech: S.leech, hits: S.hits, elDmg: S.elDmg ? S.elDmg(lv) * ST.spell : 0, el }); break;
+    case 'bow': {
+      const atk = 1 / ST.aps; setAct('attack', atk);
+      if (S.rain) { G.fx.push({ kind: 'zone', x, z, r: 4, t: 3.4, tick: 0.3, left: 6, every: 0.45, pct: S.pct(lv), elx: 'phys', col: '#e8d8b0', mesh: areaMarker(x, z, 4, '#c8d8ff') }); break; }
+      const n = S.count(lv), ed = S.elDmg ? S.elDmg(lv) * ST.spell * (1 + (ST.elPct[el] || 0) / 100) : 0;
+      later(0.7 * atk, () => { sfx.play('bow'); for (let i = 0; i < n; i++) shot({ x: me.x, z: me.z, yaw: yaw + (n > 1 ? (i - (n - 1) / 2) * (1.0 / Math.max(1, n - 1)) : 0), speed: 24, from: 'p', kind: 'arrow', color: el !== 'phys' ? col : null, dmg: attackDamage(ST, S.pct(lv)), edmg: ed, el, pierce: S.pierce, boom: S.boom ? { r: S.boom, dmg: ed * 1.5, el } : null, slow: S.slow }); });
+      break;
+    }
+    case 'dash': me.dash = { yaw, left: S.dist, pct: S.pct(lv), hit: new Set() }; sfx.play('swing'); break;
+    case 'teleport': { const d = Math.min(dist, 16), tx2 = me.x + Math.sin(yaw) * d, tz2 = me.z + Math.cos(yaw) * d; if (!walkAt(G.L, tx2, tz2) || !reachable(tx2, tz2)) { me.mana += S.mana(lv); msg(t.cantThere); return; } ring(me.x, me.z, col, 1.5); me.x = tx2; me.z = tz2; ring(me.x, me.z, col, 1.5); sfx.play('portal'); break; }
+    case 'buff': case 'form': setAct('cast', 0.4); me.buffs[id] = S.dur; if (S.form) setForm(S.form); ring(me.x, me.z, col, 2.2); sparksRing(me.x, me.z, 1.5, col); sfx.play('frost'); refreshStats(); break;
+    case 'curse': setAct('cast', 0.4); sfx.play('door'); ring(x, z, '#b05aff', S.r); for (const m of G.mobs) if (m.alive && Math.hypot(m.x - x, m.z - z) < S.r) { m.cu = m.cu || {}; m.cu[S.curse] = { v: S.val(lv), t: S.dur }; m.cursedT = S.dur; } break;
+    case 'heal': setAct('cast', 0.4); me.life = Math.min(ST.life, me.life + S.heal(lv)); for (const a of G.allies) a.hp = Math.min(a.max, a.hp + S.heal(lv)); ring(me.x, me.z, '#7aff8a', 3); sparksRing(me.x, me.z, 2, '#7aff8a'); sfx.play('drink'); break;
+    case 'corpse': {
+      const c = G.mobs.filter((m) => !m.alive && m.corpse && Math.hypot(m.x - x, m.z - z) < 5).sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z))[0];
+      if (!c) { me.mana += S.mana(lv); msg(t.noCorpse); return; }
+      setAct('cast', 0.35); useCorpse(c); explode(c.x, c.z, S.r, Math.min(c.max * S.pct(lv) / 100, 60 + lv * 40 + ch().lvl * 30) * (1 + ST.dmgPct / 100), 'fire'); sparksRing(c.x, c.z, S.r, '#ff7a3a');
+      break;
+    }
+    case 'summon': case 'trap': case 'revive': setAct('cast', 0.45); summon(id, S, lv, x, z); break;
+  }
+}
+// a cone of fire, frost or breath laid on the ground in front
+function coneFx(yaw, range, ang, color) { const m = new THREE.Mesh(new THREE.CircleGeometry(range, 24, yaw - Math.PI / 2 - ang, ang * 2), fxMat(color, 0.5)); m.material.blending = THREE.AdditiveBlending; m.rotation.x = -Math.PI / 2; m.position.set(me.x, 0.15, me.z); G.group.add(m); G.fx.push({ kind: 'ring', mesh: m, t: 0.3, r: 1, keep: true }); }
+function sparksRing(x, z, r, color) { for (let i = 0; i < 10; i++) { const a = i / 10 * 6.28; sparks(x + Math.cos(a) * r * 0.8, 0.6, z + Math.sin(a) * r * 0.8, color, 2); } }
+function zoneHit(f) {
+  for (let k = 0; k < 3; k++) sparks(f.x + (rnd() - 0.5) * f.r * 1.4, 1.5, f.z + (rnd() - 0.5) * f.r * 1.4, f.col, 3);
+  if (f.every > 50) { ring(f.x, f.z, f.col, f.r); sfx.play('boom'); shake = Math.max(shake, 0.15); }
+  for (const m of G.mobs) if (m.alive && Math.hypot(m.x - f.x, m.z - f.z) < f.r) { if (f.pct !== undefined) { const d = attackDamage(ST, f.pct); damageMob(m, d.phys, 'phys', { crit: d.crit }); } else damageMob(m, f.dmg, f.elx, { slow: f.elx === 'cold' ? 1.2 : 0 }); }
+}
+// shapeshifting: the hero turns into a wolf or a bear for the buff's length
+function setForm(f) {
+  if (me.formMesh) { scene.remove(me.formMesh); me.formMesh = null; }
+  me.form = f || null;
+  if (f) { me.formMesh = makeMob(f === 'wolf' ? 'a_wolf' : 'a_bear'); me.formMesh.scale.multiplyScalar(1.3); scene.add(me.formMesh); }
+}
+// ------------------------------------------------------------------ allies: summons, traps, the raised dead
+function summon(id, S, lv, x, z) {
+  const mine = G.allies.filter((a) => a.src === id), max = S.count(lv), k = 1 + ST.minion / 100;
+  const make = (model, px, pz, extra = {}) => ({ src: id, model, x: px, z: pz, hp: S.ahp(lv) * k, max: S.ahp(lv) * k, dmg: S.adm(lv) * k * ST.spell, el: S.el === 'phys' ? 'phys' : S.el, t: S.dur || 0, dur: S.dur || 0, cd: rnd(), speed: MOBS[model].speed ?? 4, ranged: !!MOBS[model].ranged, yaw: me.yaw, ...extra });
+  if (S.mech === 'revive') {
+    const cs = G.mobs.filter((m) => !m.alive && m.corpse && !m.boss && Math.hypot(m.x - x, m.z - z) < 9).slice(0, Math.max(0, max - mine.length));
+    if (!cs.length) { msg(tr().noCorpse); return; }
+    for (const c of cs) { useCorpse(c); G.allies.push(make(c.id, c.x, c.z, { speed: MOBS[c.id].speed, ranged: MOBS[c.id].ai === 'ranged' || MOBS[c.id].ai === 'caster' })); ring(c.x, c.z, '#b05aff', 1.2); }
+    sfx.play('door'); return;
+  }
+  // timed summons are called anew; lasting ones (the necromancer's) add up to the limit
+  if (S.dur) for (const a of mine) dropAlly(a);
+  const have = S.dur ? 0 : mine.length;
+  const model = 'a_' + S.ally, at = S.mech === 'trap' ? [x, z] : [me.x, me.z];
+  for (let i = have; i < max; i++) { const a = rnd() * 6.28, rr = S.mech === 'trap' ? 1.2 + i * 0.6 : 1.5; const [px, pz] = collide(G.L, at[0] + Math.cos(a) * rr, at[1] + Math.sin(a) * rr, 0.4); G.allies.push(make(model, px, pz)); }
+  ring(at[0], at[1], '#9affc8', 2); sfx.play('portal');
+}
+function useCorpse(c) { c.corpse = false; if (c.mesh) { G.group.remove(c.mesh); c.mesh = null; } }
+function dropAlly(a) { if (a.mesh) G.group.remove(a.mesh); a.mesh = null; G.allies.splice(G.allies.indexOf(a), 1); }
+function updateAllies(dt) {
+  for (let i = G.allies.length - 1; i >= 0; i--) {
+    const a = G.allies[i];
+    if (a.dur && (a.t -= dt) <= 0 || a.hp <= 0) { if (a.hp <= 0 && a.mesh) sparks(a.x, 1, a.z, '#c8c8c8', 8); dropAlly(a); continue; }
+    if (!a.mesh || a.mesh.parent !== G.group) { a.mesh = makeMob(a.model); G.group.add(a.mesh); if (Math.hypot(a.x - me.x, a.z - me.z) > 20 || !walkAt(G.L, a.x, a.z)) { a.x = me.x + (rnd() - 0.5) * 3; a.z = me.z + (rnd() - 0.5) * 3; } }
+    a.cd -= dt; a.actT = (a.actT || 0) + dt; let moving = 0;
+    const go = (tx2, tz2, sp) => { if (!a.speed) return; const dx = tx2 - a.x, dz = tz2 - a.z, d = Math.hypot(dx, dz) || 1, st = Math.min(d, sp * dt); [a.x, a.z] = collide(G.L, a.x + dx / d * st, a.z + dz / d * st, 0.4); a.yaw = Math.atan2(dx, dz); moving = 1; };
+    let tg = a.target && a.target.alive && Math.hypot(a.target.x - a.x, a.target.z - a.z) < 12 ? a.target : null;
+    if (!tg && G.area === 'dun') { let bd = a.speed ? 10 : 9; for (const m of G.mobs) { if (!m.alive) continue; const d = Math.hypot(m.x - a.x, m.z - a.z); if (d < bd && Math.hypot(m.x - me.x, m.z - me.z) < 16 && sees(G.L, a.x, a.z, m.x, m.z)) { bd = d; tg = m; } } }
+    a.target = tg;
+    if (tg) {
+      const d = Math.hypot(tg.x - a.x, tg.z - a.z), range = a.ranged ? 8.5 : 1.3 + MOBS[a.model].size * 0.5;
+      if (d > range) go(tg.x, tg.z, a.speed);
+      else if (a.cd <= 0) {
+        a.cd = a.ranged ? 1.5 : 1.1; a.act = 'attack'; a.actT = 0; a.yaw = Math.atan2(tg.x - a.x, tg.z - a.z);
+        if (a.ranged) shot({ x: a.x, z: a.z, yaw: a.yaw, speed: 15, from: 'a', kind: 'spell', color: EL_COL[a.el] || '#c87aff', el: a.el, sdmg: a.dmg });
+        else later(0.15, () => { if (tg.alive) damageMob(tg, a.dmg, a.el, {}); });
+      }
+    } else {
+      const k = i * 2.1, fx = me.x + Math.cos(k) * 2.4, fz = me.z + Math.sin(k) * 2.4, d = Math.hypot(fx - a.x, fz - a.z);
+      if (Math.hypot(me.x - a.x, me.z - a.z) > 24) { a.x = fx; a.z = fz; } else if (d > 1.2) go(fx, fz, a.speed * (d > 7 ? 1.7 : 1));
+    }
+    a.mesh.position.set(a.x, 0, a.z); a.mesh.rotation.y = angLerp(a.mesh.rotation.y, a.yaw, 1 - Math.exp(-dt * 12));
+    animate(a.mesh, dt, moving, a.act && a.actT < 0.6 ? a.act : '', a.actT, 0.6, 0);
+  }
+}
+// who a monster goes for: you, or one of your allies if it is clearly closer
+function mobTarget(m) {
+  let tg = me, best = me.dead ? 1e9 : Math.hypot(me.x - m.x, me.z - m.z);
+  for (const a of G.allies) { const d = Math.hypot(a.x - m.x, a.z - m.z); if (d + 1 < best) { best = d; tg = a; } }
+  return tg;
+}
+
 const reach = (m) => 1.2 + MOBS[m.id].size * 0.6;
 function reachable(x, z) { const f = field(G.L, toT(me.x), toT(me.z)); return f[toT(z) * G.L.N + toT(x)] >= 0; }
 function nearestTo(x, z, r, skip) { let b = null, bd = r; for (const m of G.mobs) { if (!m.alive || skip.has(m)) continue; const d = Math.hypot(m.x - x, m.z - z); if (d < bd) { bd = d; b = m; } } return b; }
@@ -449,6 +561,7 @@ function sparks(x, y, z, color, n = 8) {
 }
 function basicAttack(m) {
   me.yaw = Math.atan2(m.x - me.x, m.z - me.z);
+  if (me.form) { meleeSwing(m, me.form === 'bear' ? 40 : 10); return; }
   if (ST.bow) { setAct('attack', 1 / ST.aps); later(0.7 / ST.aps, () => { sfx.play('bow'); shot({ x: me.x, z: me.z, yaw: me.yaw, speed: 24, from: 'p', kind: 'arrow', dmg: attackDamage(ST, 0) }); }); return; }
   if (ch().cls === 'sorc' && ST.weapon && BASES[ST.weapon.base].type === 'wand') { setAct('cast', 1 / ST.aps); later(0.5 / ST.aps, () => shot({ x: me.x, z: me.z, yaw: me.yaw, speed: 18, from: 'p', kind: 'bolt', dmg: attackDamage(ST, 0), color: '#c87aff' })); return; }
   meleeSwing(m, 0);
@@ -456,18 +569,18 @@ function basicAttack(m) {
 // projectiles
 function shot(o) {
   const color = o.color || (o.kind === 'arrow' ? '#e8d8b0' : o.kind === 'fireball' || o.kind === 'firebolt' ? '#ff7a2a' : o.kind === 'bolt' ? '#ffe25a' : '#c8c8c8');
-  const mesh = o.kind === 'arrow' ? new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 4), glow(color, 0.6)) : new THREE.Mesh(new THREE.SphereGeometry(o.kind === 'fireball' ? 0.32 : 0.2, 10, 8), glow(color, 2.5));
+  const mesh = o.kind === 'arrow' ? new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 4), glow(color, 0.6)) : new THREE.Mesh(new THREE.SphereGeometry(o.kind === 'fireball' ? 0.32 : o.kind === 'spell' ? 0.26 : 0.2, 10, 8), glow(color, 2.5));
   if (o.kind === 'arrow') mesh.rotation.set(Math.PI / 2, o.yaw, 0, 'YXZ');
   mesh.position.set(o.x, 1.1, o.z); G.group.add(mesh);
   G.shots.push({ ...o, vx: Math.sin(o.yaw) * o.speed, vz: Math.cos(o.yaw) * o.speed, life: 1.4, mesh, hitSet: new Set() });
 }
-function explode(x, z, r, dmg, el) { ring(x, z, el === 'fire' ? '#ff8a3a' : '#ffe25a', r); sfx.play('boom'); for (const m of G.mobs) if (m.alive && Math.hypot(m.x - x, m.z - z) < r + 0.4) damageMob(m, dmg, el); }
+function explode(x, z, r, dmg, el) { ring(x, z, EL_COL[el] || '#ff8a3a', r); sfx.play('boom'); for (const m of G.mobs) if (m.alive && Math.hypot(m.x - x, m.z - z) < r + 0.4) damageMob(m, dmg, el); }
 
 // ------------------------------------------------------------------ effects
 const fxMat = (c, o = 0.6) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, side: THREE.DoubleSide });
 function ring(x, z, color, r) { const m = new THREE.Mesh(new THREE.RingGeometry(0.75, 1, 32), fxMat(color, 0.8)); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.12, z); G.group.add(m); G.fx.push({ kind: 'ring', mesh: m, t: 0.45, r }); }
 function areaMarker(x, z, r, color) { const m = new THREE.Mesh(new THREE.CircleGeometry(r, 32), fxMat(color, 0.22)); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.08, z); G.group.add(m); return m; }
-function lightning(a, b) { const pts = []; for (let i = 0; i <= 6; i++) { const t = i / 6; pts.push(new THREE.Vector3(a.x + (b.x - a.x) * t + (i && i < 6 ? (rnd() - 0.5) * 0.8 : 0), 1.2 + (i && i < 6 ? (rnd() - 0.5) * 0.6 : 0), a.z + (b.z - a.z) * t + (i && i < 6 ? (rnd() - 0.5) * 0.8 : 0))); } const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: '#fff4a0' })); G.group.add(l); G.fx.push({ kind: 'flash', mesh: l, t: 0.18 }); }
+function lightning(a, b, color = '#fff4a0') { const pts = []; for (let i = 0; i <= 6; i++) { const t = i / 6; pts.push(new THREE.Vector3(a.x + (b.x - a.x) * t + (i && i < 6 ? (rnd() - 0.5) * 0.8 : 0), 1.2 + (i && i < 6 ? (rnd() - 0.5) * 0.6 : 0), a.z + (b.z - a.z) * t + (i && i < 6 ? (rnd() - 0.5) * 0.8 : 0))); } const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color })); G.group.add(l); G.fx.push({ kind: 'flash', mesh: l, t: 0.18 }); }
 function clickMarker(x, z) { const m = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.4, 16), fxMat('#ffe8a0', 0.9)); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.1, z); G.group.add(m); G.fx.push({ kind: 'flash', mesh: m, t: 0.35 }); }
 function floatText(x, z, text, color, k = 1) { const el = document.createElement('div'); el.className = 'dmg'; el.textContent = text; el.style.color = color; el.style.fontSize = (16 * k) + 'px'; $('labels').appendChild(el); G.fx.push({ kind: 'text', el, x: x + (rnd() - 0.5) * 0.6, z, t: 0.9, y: 2 }); }
 
@@ -505,7 +618,7 @@ function frame(now) {
 function update(dt, now) {
   const c = ch(), L = G.L;
   for (const k of Object.keys(me.cds)) me.cds[k] = Math.max(0, me.cds[k] - dt);
-  for (const k of Object.keys(me.buffs)) me.buffs[k] = Math.max(0, me.buffs[k] - dt);
+  for (const k of Object.keys(me.buffs)) { const was = me.buffs[k]; me.buffs[k] = Math.max(0, was - dt); if (was > 0 && me.buffs[k] === 0) { if (SKILLS[k] && SKILLS[k].form) setForm(null); if (SKILLS[k] && SKILLS[k].gen) refreshStats(); } }
   me.atkT = Math.max(0, me.atkT - dt); me.actT += dt; me.inv = Math.max(0, me.inv - dt); me.hitT = Math.max(0, (me.hitT || 0) - dt);
   if (!me.dead) {
     // regeneration and potions over time
@@ -514,7 +627,7 @@ function update(dt, now) {
     updateHero(dt);
   }
   if (G.area === 'dun') updateMobs(dt);
-  updateShots(dt); updateFx(dt);
+  updateAllies(dt); updateShots(dt); updateFx(dt);
   // pick up gold and potions you walk over; open urns and chests you touch
   for (const d of [...G.drops]) { const dd = Math.hypot(d.x - me.x, d.z - me.z); if ((d.kind !== 'item' && dd < 0.9) || (me.pickup === d && dd < 1.2)) { if (me.pickup === d) me.pickup = null; pickUp(d); } if (d.mesh) d.mesh.children.forEach((o) => { if (o.userData.spin) o.rotation.y += dt * 2; }); }
   for (const p of G.props) if (!p.done && Math.hypot(p.x - me.x, p.z - me.z) < 1.4) openProp(p);
@@ -541,7 +654,8 @@ function update(dt, now) {
   me.speedShown = me.speed;
   me.hitK = Math.max(0, me.hitK - dt * 5);
   animate(me.mesh, dt, me.speed, me.act && me.actT < me.actDur ? me.act : '', me.actT, me.actDur, me.hitK);
-  me.mesh.visible = !me.dead;
+  me.mesh.visible = !me.dead && !me.form;
+  if (me.formMesh) { me.formMesh.position.copy(me.mesh.position); me.formMesh.rotation.y = me.mesh.rotation.y; animate(me.formMesh, dt, me.speed, me.act && me.actT < me.actDur ? me.act : '', me.actT, me.actDur, me.hitK); me.formMesh.visible = !me.dead; }
   // camera
   if (keys.has('KeyZ')) camYaw += dt * 2; if (keys.has('KeyX')) camYaw -= dt * 2;
   const dist = 15 * camZoom, pitch = 0.98;
@@ -568,10 +682,21 @@ function updateHero(dt) {
   const wasMoving = me.speed > 0;
   if (me.pending && (me.pending.t -= dt) <= 0) {
     const { m, pct, opts } = me.pending; me.pending = null;
+    const strike = (x) => {
+      if (!(x && x.alive)) return;
+      if (rnd() < hitChance(ST, ch().lvl, x.def)) { const d = attackDamage(ST, pct); const dealt = damageMob(x, d.phys, 'phys', { ...opts, crit: d.crit, melee: true }); if (d.fire) damageMob(x, d.fire, 'fire'); if (opts.elDmg) damageMob(x, opts.elDmg, opts.el); if (opts.leech) me.life = Math.min(ST.life, me.life + dealt * opts.leech / 100); sfx.play('thud'); }
+      else floatText(x.x, x.z, 'Miss', '#c8c8c8');
+    };
     if (m && m.alive && Math.hypot(m.x - me.x, m.z - me.z) < reach(m) + 0.8) {
-      if (rnd() < hitChance(ST, ch().lvl, m.def)) { const d = attackDamage(ST, pct); damageMob(m, d.phys, 'phys', { ...opts, crit: d.crit, melee: true }); if (d.fire) damageMob(m, d.fire, 'fire'); sfx.play('thud'); }
-      else floatText(m.x, m.z, 'Miss', '#c8c8c8');
+      for (let h = 0; h < (opts.hits || 1); h++) { if (h === 0) strike(m); else later(h * 0.13, () => { strike(m); slash(me.yaw + (h % 2 ? 0.5 : -0.5)); }); }
+      if (opts.cleave) for (const o of G.mobs) { if (o === m || !o.alive) continue; const d = Math.hypot(o.x - me.x, o.z - me.z), a = Math.atan2(o.x - me.x, o.z - me.z) - me.yaw; if (d < opts.cleave + 0.6 && Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < 1.3) strike(o); }
     }
+  }
+  if (me.dash) {
+    const D = me.dash, st = Math.min(D.left, 20 * dt); D.left -= st;
+    const [nx, nz] = collide(L, me.x + Math.sin(D.yaw) * st, me.z + Math.cos(D.yaw) * st, 0.45); const blocked = Math.hypot(nx - me.x, nz - me.z) < st * 0.3; me.x = nx; me.z = nz;
+    for (const m of G.mobs) if (m.alive && !D.hit.has(m) && Math.hypot(m.x - me.x, m.z - me.z) < 1.6) { D.hit.add(m); const d = attackDamage(ST, D.pct); damageMob(m, d.phys, 'phys', { crit: d.crit, melee: true, knock: 1.5 }); }
+    if (D.left <= 0 || blocked) me.dash = null; me.speed = 1.5; return;
   }
   if (me.leap) {
     me.leap.t += dt; const k = Math.min(1, me.leap.t / 0.45);
@@ -627,25 +752,28 @@ function updateMobs(dt) {
   G.fieldT -= dt;
   if (G.fieldT <= 0) { G.fieldT = 0.3; G.field = field(L, toT(me.x), toT(me.z)); }
   for (const m of G.mobs) {
-    if (!m.alive) { if (m.mesh && m.dieT > 0) { m.dieT -= dt; m.mesh.rotation.z = Math.min(1.5, (1 - m.dieT) * 3); m.mesh.position.y = -Math.max(0, 0.4 - m.dieT) * 2; if (m.dieT <= 0) { G.group.remove(m.mesh); m.mesh = null; } } continue; }
+    if (!m.alive) { if (m.mesh && m.dieT > 0) { m.dieT -= dt; m.mesh.rotation.z = Math.min(1.5, (1 - m.dieT) * 3); m.mesh.position.y = -Math.max(0, 0.4 - m.dieT) * 2; } continue; }
     if (!m.mesh) continue;
     m.cd -= dt; m.stun = Math.max(0, m.stun - dt); m.slow = Math.max(0, m.slow - dt); m.hitT = Math.max(0, (m.hitT || 0) - dt); m.actT += dt;
-    const d = Math.hypot(me.x - m.x, me.z - m.z);
-    if (!m.aggro && d < (m.boss ? 16 : 11) && sees(L, m.x, m.z, me.x, me.z)) { m.aggro = true; for (const o of G.mobs) if (o.alive && !o.aggro && Math.hypot(o.x - m.x, o.z - m.z) < 7) o.aggro = true; }
+    if (m.cu) for (const [k, c] of Object.entries(m.cu)) { if ((c.t -= dt) <= 0) delete m.cu[k]; else if (k === 'dot') { c.acc = (c.acc || 0) + dt; if (c.acc >= 0.5) { c.acc = 0; damageMob(m, c.v * 0.5, 'poison', { dot: true }); } } }
+    if (m.dots && m.dots.length) { m.dotAcc = (m.dotAcc || 0) + dt; if (m.dotAcc >= 0.5) { let sum = 0; for (const q of m.dots) { sum += q.dps * Math.min(0.5, q.t); q.t -= 0.5; } m.dots = m.dots.filter((q) => q.t > 0); m.dotAcc = 0; if (sum > 0) damageMob(m, sum, 'poison', { dot: true }); } }
+    if (!m.alive) continue;
+    const tg = mobTarget(m), d = Math.hypot(tg.x - m.x, tg.z - m.z);
+    if (!m.aggro && Math.hypot(me.x - m.x, me.z - m.z) < (m.boss ? 16 : 11) && sees(L, m.x, m.z, me.x, me.z)) { m.aggro = true; for (const o of G.mobs) if (o.alive && !o.aggro && Math.hypot(o.x - m.x, o.z - m.z) < 7) o.aggro = true; }
     let moving = 0;
     if (m.aggro && !m.stun && !me.dead && G.area === 'dun') {
-      const sp = m.speed * (m.slow > 0 ? 0.5 : 1) * dt, R = 0.9 + MOBS[m.id].size * 0.6;
+      const sp = m.speed * (m.slow > 0 ? 0.5 : 1) * (m.cu && m.cu.slow ? 1 - m.cu.slow.v / 100 : 1) * dt, R = 0.9 + MOBS[m.id].size * 0.6;
       const goTo = (tx2, tz2) => { let nx = tx2, nz = tz2; if (!sees(L, m.x, m.z, tx2, tz2) && G.field) { const s = stepOn(L, G.field, m.x, m.z); if (s) [nx, nz] = s; } const dx = nx - m.x, dz = nz - m.z, dd = Math.hypot(dx, dz) || 1; [m.x, m.z] = collide(L, m.x + dx / dd * Math.min(sp, dd), m.z + dz / dd * Math.min(sp, dd), 0.4 * MOBS[m.id].size); m.yaw = Math.atan2(dx, dz); moving = 1; };
-      if (m.charging > 0) { m.charging -= dt; const vx = Math.sin(m.yaw) * m.speed * 3 * dt, vz = Math.cos(m.yaw) * m.speed * 3 * dt; [m.x, m.z] = collide(L, m.x + vx, m.z + vz, 0.4); moving = 1.5; if (d < R && !m.chargeHit) { m.chargeHit = true; mobHits(m, 1.4); } }
-      else if (m.ai === 'boss') bossAI(m, d, dt, goTo);
+      if (m.charging > 0) { m.charging -= dt; const vx = Math.sin(m.yaw) * m.speed * 3 * dt, vz = Math.cos(m.yaw) * m.speed * 3 * dt; [m.x, m.z] = collide(L, m.x + vx, m.z + vz, 0.4); moving = 1.5; if (d < R && !m.chargeHit) { m.chargeHit = true; mobHits(m, 1.4, tg); } }
+      else if (m.ai === 'boss') (tg === me ? bossAI(m, d, dt, goTo) : (d > R ? goTo(tg.x, tg.z) : m.cd <= 0 && ((m.cd = 1.5), (m.swing = 0.4), (m.act = 'attack'), (m.actT = 0))));
       else if (m.ai === 'ranged' || m.ai === 'caster') {
-        if (d > 9 || !sees(L, m.x, m.z, me.x, me.z)) goTo(me.x, me.z);
-        else if (d < 4.5) { const a = Math.atan2(m.x - me.x, m.z - me.z); goTo(m.x + Math.sin(a) * 2, m.z + Math.cos(a) * 2); }
-        if (m.cd <= 0 && d < 12 && sees(L, m.x, m.z, me.x, me.z)) { m.cd = 1.8 + rnd() * 0.6; m.yaw = Math.atan2(me.x - m.x, me.z - m.z); m.act = 'attack'; m.actT = 0; shot({ x: m.x, z: m.z, yaw: m.yaw, speed: MOBS[m.id].shot === 'arrow' ? 15 : 11, from: 'm', kind: MOBS[m.id].shot, dmgM: m.dmg, el: m.ai === 'caster' ? m.el : null, mlvl: m.mlvl }); }
-      } else if (m.ai === 'charger' && d > 3.5 && d < 9 && m.cd <= 0 && sees(L, m.x, m.z, me.x, me.z)) { m.cd = 3.5; m.charging = 0.7; m.chargeHit = false; m.yaw = Math.atan2(me.x - m.x, me.z - m.z); }
-      else if (d > R) goTo(me.x, me.z);
-      else if (m.cd <= 0) { m.cd = 1.3 + rnd() * 0.5; m.act = 'attack'; m.actT = 0; m.actDur = 0.75; m.yaw = Math.atan2(me.x - m.x, me.z - m.z); m.swing = 0.75 * 0.46; }
-      if (m.swing > 0 && (m.swing -= dt) <= 0 && d < R + 0.6) mobHits(m, 1);
+        if (d > 9 || !sees(L, m.x, m.z, tg.x, tg.z)) goTo(tg.x, tg.z);
+        else if (d < 4.5) { const a = Math.atan2(m.x - tg.x, m.z - tg.z); goTo(m.x + Math.sin(a) * 2, m.z + Math.cos(a) * 2); }
+        if (m.cd <= 0 && d < 12 && sees(L, m.x, m.z, tg.x, tg.z)) { m.cd = 1.8 + rnd() * 0.6; m.yaw = Math.atan2(tg.x - m.x, tg.z - m.z); m.act = 'attack'; m.actT = 0; shot({ x: m.x, z: m.z, yaw: m.yaw, speed: MOBS[m.id].shot === 'arrow' ? 15 : 11, from: 'm', kind: MOBS[m.id].shot, dmgM: m.dmg, el: m.ai === 'caster' ? m.el : null, mlvl: m.mlvl }); }
+      } else if (m.ai === 'charger' && d > 3.5 && d < 9 && m.cd <= 0 && sees(L, m.x, m.z, tg.x, tg.z)) { m.cd = 3.5; m.charging = 0.7; m.chargeHit = false; m.yaw = Math.atan2(tg.x - m.x, tg.z - m.z); }
+      else if (d > R) goTo(tg.x, tg.z);
+      else if (m.cd <= 0) { m.cd = 1.3 + rnd() * 0.5; m.act = 'attack'; m.actT = 0; m.actDur = 0.75; m.yaw = Math.atan2(tg.x - m.x, tg.z - m.z); m.swing = 0.75 * 0.46; }
+      if (m.swing > 0 && (m.swing -= dt) <= 0 && d < R + 0.6) mobHits(m, 1, tg);
     }
     // keep monsters from stacking
     for (const o of G.mobs) { if (o === m || !o.alive) continue; const dx = m.x - o.x, dz = m.z - o.z, dd = Math.hypot(dx, dz), want = 0.5 * (MOBS[m.id].size + MOBS[o.id].size); if (dd < want && dd > 0.001) { const push = (want - dd) * 0.5; [m.x, m.z] = collide(L, m.x + dx / dd * push, m.z + dz / dd * push, 0.4); } }
@@ -657,8 +785,11 @@ function updateMobs(dt) {
     animate(m.mesh, dt, moving * (m.slow > 0 ? 0.5 : 1), m.act && m.actT < (m.actDur || 0.6) ? m.act : '', m.actT, m.actDur || 0.6, m.hitK);
   }
 }
-function mobHits(m, k) {
+function mobHits(m, k, tg = me) {
   if (G.area !== 'dun') return;
+  const weak = m.cu && m.cu.weak ? 1 - m.cu.weak.v / 100 : 1;
+  if (tg !== me) { if (tg.hp > 0) { tg.hp -= m.dmg * k * weak; sparks(tg.x, 1, tg.z, '#ff8a6a', 5); } return; }
+  k *= weak;
   if (rnd() > mobHitChance(ST, m.mlvl)) { floatText(me.x, me.z, 'Miss', '#c8c8c8'); return; }
   hurtMe(m.dmg * k, m.el, m);
   if (m.mods.includes('vamp')) m.hp = Math.min(m.max, m.hp + m.dmg);
@@ -683,27 +814,36 @@ function updateShots(dt) {
   for (let i = G.shots.length - 1; i >= 0; i--) {
     const s = G.shots[i]; s.life -= dt;
     const nx = s.x + s.vx * dt, nz = s.z + s.vz * dt;
+    if (s.homing) { let best = null, bd = 9; for (const m of G.mobs) { if (!m.alive || s.hitSet.has(m)) continue; const d = Math.hypot(m.x - s.x, m.z - s.z); if (d < bd) { bd = d; best = m; } } if (best) { const want = Math.atan2(best.x - s.x, best.z - s.z), cur = Math.atan2(s.vx, s.vz), nyaw = angLerp(cur, want, Math.min(1, dt * 4)), sp = Math.hypot(s.vx, s.vz); s.vx = Math.sin(nyaw) * sp; s.vz = Math.cos(nyaw) * sp; } }
     let done = s.life <= 0 || !walkAt(L, nx, nz);
     s.x = nx; s.z = nz; s.mesh.position.set(s.x, 1.1, s.z);
-    if (!done && s.from === 'p') {
+    if (!done && (s.from === 'p' || s.from === 'a')) {
       for (const m of G.mobs) {
         if (!m.alive || s.hitSet.has(m) || Math.hypot(m.x - s.x, m.z - s.z) > 0.55 + MOBS[m.id].size * 0.4) continue;
         s.hitSet.add(m);
-        if (s.boom) { explode(s.x, s.z, s.boom.r, s.boom.fire, 'fire'); if (s.dmg) damageMob(m, s.dmg.phys, 'phys', { crit: s.dmg.crit }); done = true; break; }
-        if (rnd() < hitChance(ST, ch().lvl, m.def)) { damageMob(m, s.dmg.phys, 'phys', { crit: s.dmg.crit, slow: s.slow }); if (s.dmg.fire) damageMob(m, s.dmg.fire, 'fire'); if (s.cold) damageMob(m, s.cold, 'cold', { slow: 2 }); } else floatText(m.x, m.z, 'Miss', '#c8c8c8');
+        if (s.kind === 'spell') {
+          damageMob(m, s.sdmg, s.el, { slow: s.slow });
+          if (s.boom) explode(s.x, s.z, s.boom.r, s.boom.dmg, s.boom.el);
+          if (s.jumps) { let from = m, cur = nearestTo(m.x, m.z, 7, s.hitSet); for (let j = 0; j < s.jumps && cur; j++) { lightning(from, cur, s.color); damageMob(cur, s.sdmg * 0.8, s.el); s.hitSet.add(cur); from = cur; cur = nearestTo(cur.x, cur.z, 7, s.hitSet); } }
+          if (!s.pierce || s.pierce-- <= 0) { done = true; break; } continue;
+        }
+        if (s.boom) { explode(s.x, s.z, s.boom.r, s.boom.dmg ?? s.boom.fire, s.boom.el || 'fire'); if (s.dmg) damageMob(m, s.dmg.phys, 'phys', { crit: s.dmg.crit }); done = true; break; }
+        if (rnd() < hitChance(ST, ch().lvl, m.def)) { damageMob(m, s.dmg.phys, 'phys', { crit: s.dmg.crit, slow: s.slow }); if (s.dmg.fire) damageMob(m, s.dmg.fire, 'fire'); if (s.cold) damageMob(m, s.cold, 'cold', { slow: 2 }); if (s.edmg) damageMob(m, s.edmg, s.el, { slow: s.slow }); } else floatText(m.x, m.z, 'Miss', '#c8c8c8');
         if (!s.pierce || s.pierce-- <= 0) { done = true; break; }
       }
+    } else if (!done && s.from === 'm' && G.allies.some((a) => Math.hypot(a.x - s.x, a.z - s.z) < 0.8)) { const a = G.allies.find((x) => Math.hypot(x.x - s.x, x.z - s.z) < 0.8); a.hp -= s.dmgM; sparks(a.x, 1, a.z, '#ff8a6a', 4); done = true;
     } else if (!done && s.from === 'm' && Math.hypot(me.x - s.x, me.z - s.z) < 0.7) { if (rnd() < mobHitChance(ST, s.mlvl) || s.el) hurtMe(s.dmgM, s.el, null); done = true; }
-    if (done) { if (s.boom && s.life > 0 && s.from === 'p' && !s.hitSet.size) explode(s.x, s.z, s.boom.r, s.boom.fire, 'fire'); G.group.remove(s.mesh); G.shots.splice(i, 1); }
+    if (done) { if (s.boom && s.life > 0 && s.from === 'p' && !s.hitSet.size) explode(s.x, s.z, s.boom.r, s.boom.dmg ?? s.boom.fire, s.boom.el || 'fire'); G.group.remove(s.mesh); G.shots.splice(i, 1); }
   }
 }
 function updateFx(dt) {
   for (let i = G.fx.length - 1; i >= 0; i--) {
     const f = G.fx[i]; f.t -= dt;
-    if (f.kind === 'ring') { const k = 1 - f.t / 0.45; f.mesh.scale.setScalar(Math.max(0.05, k) * f.r); f.mesh.material.opacity = 0.8 * (1 - k); }
+    if (f.kind === 'ring') { if (f.keep) f.mesh.material.opacity = f.t / 0.3 * 0.5; else { const k = 1 - f.t / 0.45; f.mesh.scale.setScalar(Math.max(0.05, k) * f.r); f.mesh.material.opacity = 0.8 * (1 - k); } }
     else if (f.kind === 'text') { f.y += dt * 1.6; _v.set(f.x, f.y, f.z).project(camera); f.el.style.transform = `translate(${(_v.x + 1) / 2 * innerWidth}px, ${(1 - _v.y) / 2 * innerHeight}px) translate(-50%, -50%)`; f.el.style.opacity = Math.min(1, f.t * 2); }
     else if (f.kind === 'rain') { f.tick -= dt; if (f.tick <= 0) { f.tick = 0.37; for (const m of G.mobs) if (m.alive && Math.hypot(m.x - f.x, m.z - f.z) < f.r) { const d = attackDamage(ST, f.pct); damageMob(m, d.phys, 'phys', { crit: d.crit }); } for (let k = 0; k < 6; k++) { const a = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 4), glow('#e8d8b0', 0.6)); a.position.set(f.x + (rnd() - 0.5) * f.r * 1.6, 3, f.z + (rnd() - 0.5) * f.r * 1.6); G.group.add(a); G.fx.push({ kind: 'fall', mesh: a, t: 0.25 }); } } }
     else if (f.kind === 'fall') f.mesh.position.y -= dt * 14;
+    else if (f.kind === 'zone') { f.tick -= dt; if (f.tick <= 0 && f.left > 0) { f.left--; f.tick = f.every; zoneHit(f); } f.mesh.material.opacity = 0.18 + Math.sin(f.t * 10) * 0.06; }
     else if (f.kind === 'spark') { f.vy -= 14 * dt; f.mesh.position.x += f.vx * dt; f.mesh.position.y = Math.max(0.05, f.mesh.position.y + f.vy * dt); f.mesh.position.z += f.vz * dt; f.mesh.scale.setScalar(Math.max(0.1, f.t * 3)); }
     else if (f.kind === 'slash') { f.mesh.material.opacity = Math.max(0, f.t / 0.16) * 0.75; f.mesh.scale.setScalar(1 + (0.16 - f.t) * 2); }
     else if (f.kind === 'meteor') {
@@ -750,7 +890,7 @@ for (const k of ['merchant', 'gambler', 'healer', 'stash', 'waypoint', 'cave']) 
 // X Y B RB the four skill slots · D-pad ↑ heal ↓ mana ← rejuvenation → town portal · Start bag · Back map · LS skills
 // menus: D-pad or left stick moves the highlight · A chooses · B or Start closes
 const pad = { on: false, prev: [], mx: 0, mz: 0, attacking: false, rep: 0, idx: null, name: '' };
-const PADKEY = { Q: 'X', E: 'Y', R: 'B', F: 'RB' };
+const PADKEY = { Q: 'X', E: 'Y', R: 'B', F: 'RB', G: 'LB', H: 'LT' };
 const dz = (v) => (Math.abs(v) < 0.22 ? 0 : (v - Math.sign(v) * 0.22) / 0.78);
 function rumble(strength, ms) {
   const gp = padNow(); const a = gp && gp.vibrationActuator;
@@ -834,7 +974,7 @@ function pollPad(dt) {
     if (hit(9)) { openWin('inv'); requestAnimationFrame(() => moveFocus(0, 1)); }
     if (hit(10)) { openWin('skills'); requestAnimationFrame(() => moveFocus(0, 1)); }
     if (hit(8)) bigMap = !bigMap;
-    if (hit(4)) camYaw += Math.PI / 4; if (hit(6)) camYaw -= Math.PI / 4;
+    if (hit(4)) padCast('G'); if (hit(6)) padCast('H');
   }
   pad.prev = gp.buttons.map((x) => x.pressed || x.value > 0.5);
 }
@@ -865,10 +1005,13 @@ function drawHud(force) {
   const g = pad.on ? ['↑', '↓', '←', '→'] : ['1', '2', '3', 'T'];
   $('pot1').innerHTML = `🧪<b>${pots('hp')}</b><small>${g[0]}</small>`; $('pot2').innerHTML = `🧴<b>${pots('mp')}</b><small>${g[1]}</small>`; $('pot3').innerHTML = `💜<b>${c.pots.rejuv || 0}</b><small>${g[2]}</small>`;
   $('tpBtn').innerHTML = `📜<b>${c.tp}</b><small>${g[3]}</small>`;
-  $('skillbar').innerHTML = ['Q', 'E', 'R', 'F'].map((k) => { const id = c.keys[k], S = id && SKILLS[id], cd = id ? me.cds[id] || 0 : 0; return `<button data-k="${k}" class="${c.rmb === id && id ? 'sel' : ''}" title="${S ? esc(tx(S.n)) : ''}">${S ? S.icon : ''}<small>${pad.on ? PADKEY[k] : k}</small>${cd > 0 ? `<i>${cd.toFixed(1)}</i>` : ''}</button>`; }).join('');
+  $('skillbar').innerHTML = SKEYS.map((k) => { const id = c.keys[k], S = id && SKILLS[id], cd = id ? me.cds[id] || 0 : 0; return `<button data-k="${k}" class="${c.rmb === id && id ? 'sel' : ''}" title="${S ? esc(tx(S.n)) : ''}">${S ? S.icon : ''}<small>${pad.on ? PADKEY[k] : k}</small>${cd > 0 ? `<i>${cd.toFixed(1)}</i>` : ''}</button>`; }).join('');
   $('skillbar').querySelectorAll('button').forEach((b) => b.onclick = () => { const id = c.keys[b.dataset.k]; if (id) { c.rmb = id; drawHud(true); } else toggleWin('skills'); });
-  if (isTouch) for (const k of ['Q', 'E', 'R', 'F']) { const id = c.keys[k]; $('t' + k).textContent = id ? SKILLS[id].icon : '·'; }
+  if (isTouch) for (const k of SKEYS) { const id = c.keys[k]; $('t' + k).textContent = id ? SKILLS[id].icon : '·'; }
   $('alertPts').hidden = !(c.pts || c.spts);
+  const bf = Object.entries(me.buffs).filter(([k, v]) => v > 0 && SKILLS[k]).map(([k, v]) => `<span title="${esc(tx(SKILLS[k].n))}">${SKILLS[k].icon}<small>${Math.ceil(v)}</small></span>`);
+  if (G.allies.length) bf.push(`<span>👥<small>${G.allies.length}</small></span>`);
+  $('buffs').innerHTML = bf.join('');
   if (force) for (const [k, el] of Object.entries(townTags)) el.textContent = k === 'cave' ? '⬇ ' + t.cave : k === 'stash' ? t.stashName : k === 'waypoint' ? t.waypoint : t[k];
   // the monster under the cursor
   const m = !isTouch ? mobAtScreen(mouse.x, mouse.y) || (me.target && me.target.alive ? me.target : null) : me.target && me.target.alive ? me.target : null;
@@ -894,6 +1037,8 @@ function toast(text, color = '#fff') { const el = document.createElement('div');
 function flash() { const f = $('flash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); }
 
 // ------------------------------------------------------------------ windows: inventory and character, skills, merchant, gambler, stash, waypoint
+const SKEYS = ['Q', 'E', 'R', 'F', 'G', 'H'];
+let skillTab = 0;
 let win = null, shopStock = [], tipEl = $('tip');
 const winOpen = () => !!win;
 function openWin(w) { win = w; $('win').hidden = false; renderWin(); keys.clear(); mouse.down = false; }
@@ -980,13 +1125,17 @@ function renderWin() {
     $('winTitle').textContent = win === 'shop' ? t.merchant : win === 'gamble' ? t.gambler : win === 'stash' ? t.stashName : t.inv;
   } else if (win === 'skills') {
     $('winTitle').textContent = t.skills;
-    el.innerHTML = `<p class="pts">${t.spoints(c.spts)}</p><div class="skills">${SKILL_ORDER[c.cls].map((id) => {
+    const trees = TREES[c.cls]; skillTab = Math.min(skillTab, trees.length - 1); const tree = trees[skillTab];
+    const learned = (tr2) => tr2.skills.reduce((a, id) => a + (c.skills[id] || 0), 0);
+    el.innerHTML = `<p class="pts">${t.spoints(c.spts)}</p><div class="tabs">${trees.map((x, i) => `<button data-tab="${i}" class="${i === skillTab ? 'sel' : ''}">${x.icon} ${tx(x.n)} <small>${learned(x)}</small></button>`).join('')}</div><div class="skills">${tree.skills.map((id) => {
       const S = SKILLS[id], lv = c.skills[id] || 0, eff = lv ? lv + ST.skillsBonus : 0, can = c.spts > 0 && c.lvl >= S.req && lv < MAX_SKILL;
       const d = (l) => tx(S.d).replace(/\{(\w+)\}/g, (_, k) => (S[k] ? S[k](Math.max(1, l)) : k));
-      return `<div class="sk ${lv ? '' : 'locked'}"><span class="ic">${S.icon}</span><div><b>${tx(S.n)}</b> <small>${lv ? t.skillLv(eff) : c.lvl < S.req ? t.learnAt(S.req) : ''}</small><p>${esc(d(eff || 1))}</p>${lv && lv < MAX_SKILL ? `<p class="dim">${t.next}: ${esc(d(eff + 1))}</p>` : ''}${S.mana ? `<p class="dim">💧 ${S.mana(Math.max(1, eff))}</p>` : ''}</div>
-        <div class="acts">${can ? `<button data-up="${id}">+</button>` : ''}${lv && S.kind !== 'passive' ? ['Q', 'E', 'R', 'F'].map((k) => `<button class="key ${c.keys[k] === id ? 'sel' : ''}" data-bind="${id}" data-k="${k}">${k}</button>`).join('') : ''}</div></div>`;
+      const bindable = lv && S.kind !== 'passive';
+      return `<div class="sk ${lv ? '' : 'locked'}"><span class="ic">${S.icon}</span><div><b>${tx(S.n)}</b> <small>${lv ? t.skillLv(eff) : c.lvl < S.req ? t.learnAt(S.req) : t.lv(S.req)}</small><p>${esc(d(eff || 1))}</p>${lv && lv < MAX_SKILL ? `<p class="dim">${t.next}: ${esc(d(eff + 1))}</p>` : ''}${S.mana && S.mana(1) ? `<p class="dim">💧 ${S.mana(Math.max(1, eff))}</p>` : ''}</div>
+        <div class="acts">${can ? `<button data-up="${id}">+</button>` : ''}${bindable ? SKEYS.map((k) => `<button class="key ${c.keys[k] === id ? 'sel' : ''}" data-bind="${id}" data-k="${k}">${pad.on ? PADKEY[k] : k}</button>`).join('') : ''}</div></div>`;
     }).join('')}</div>`;
-    el.querySelectorAll('[data-up]').forEach((b) => b.onclick = () => { const id = b.dataset.up; if (c.spts <= 0) return; c.spts--; c.skills[id] = (c.skills[id] || 0) + 1; if (SKILLS[id].kind !== 'passive' && !Object.values(c.keys).includes(id)) { const free = ['Q', 'E', 'R', 'F'].find((k) => !c.keys[k]); if (free) c.keys[free] = id; } sfx.play('levelup'); refreshStats(); changed(); renderWin(); drawHud(true); });
+    el.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => { skillTab = +b.dataset.tab; renderWin(); });
+    el.querySelectorAll('[data-up]').forEach((b) => b.onclick = () => { const id = b.dataset.up; if (c.spts <= 0) return; c.spts--; c.skills[id] = (c.skills[id] || 0) + 1; if (SKILLS[id].kind !== 'passive' && !Object.values(c.keys).includes(id)) { const free = SKEYS.find((k) => !c.keys[k]); if (free) c.keys[free] = id; } sfx.play('levelup'); refreshStats(); changed(); renderWin(); drawHud(true); });
     el.querySelectorAll('[data-bind]').forEach((b) => b.onclick = () => { for (const k of Object.keys(c.keys)) if (c.keys[k] === b.dataset.bind) c.keys[k] = null; c.keys[b.dataset.k] = b.dataset.bind; c.rmb = b.dataset.bind; changed(); renderWin(); drawHud(true); });
   } else if (win === 'wp') {
     $('winTitle').textContent = t.waypoint;
@@ -1038,4 +1187,4 @@ document.body.classList.toggle('touch', isTouch);
 renderSelect(); requestAnimationFrame(frame);
 (async () => { try { cloud = await import('/save.js'); if (await cloud.pull(GAME, SAVE_KEY)) { SV = JSON.parse(localStorage.getItem(SAVE_KEY)) || SV; renderSelect(); } } catch (e) { cloud = null; } })();
 if (params.has('quick')) { if (!SV.chars.length) SV.chars.push(newChar('Test', params.get('quick') || 'warrior')); startChar(0); }
-window.DH = { G, me, ch, camera, refresh: () => { refreshStats(); buildHero(); }, get ST() { return ST; }, enterLevel, enterTown, cast, openWin, closeWin, gainXp, dropItem, pickUp, SV: () => SV };
+window.DH = { G, me, ch, camera, refresh: () => { refreshStats(); buildHero(); }, get ST() { return ST; }, enterLevel, enterTown, cast, setForm, order: (c) => SKILL_ORDER[c], skill: (id) => SKILLS[id], formBuffs: () => Object.fromEntries(Object.entries(SKILLS).filter(([, S]) => S.mech === 'form').map(([k, S]) => [k, S.form])), openWin, closeWin, gainXp, dropItem, pickUp, SV: () => SV };

@@ -1,7 +1,7 @@
 // Models in the Breezy Isle look (four-step cel shading, dark brown outlines): heroes that wear what they equip,
 // every monster and boss, and the dungeon's props.
 import * as THREE from 'three';
-import { MOBS, BASES, CLASSES } from './data.js?v=2';
+import { MOBS, BASES, CLASSES } from './data.js?v=3';
 
 export const GRAD = (() => { const d = new Uint8Array([70, 150, 210, 255]); const t = new THREE.DataTexture(d, 4, 1, THREE.RedFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
 const mats = new Map();
@@ -66,14 +66,16 @@ export function makeHero(cls, equip = {}) {
     if (h && h.tier >= 3) { put(hd, cyl(0.42, 0.45, 0.22, 10), mat('#e8c84a'), 0, 0.42, 0); for (let i = 0; i < 5; i++) put(hd, cone(0.07, 0.2, 5), mat('#e8c84a'), Math.cos(i * 1.256) * 0.38, 0.62, Math.sin(i * 1.256) * 0.38); }
     else if (h && h.tier >= 2) { const m = put(hd, sph(0.48, 14, 8), mat('#b8c0d0'), 0, 0.12, -0.02); m.scale.set(1, 0.75, 1); put(hd, box(0.08, 0.3, 0.1), mat('#b8c0d0'), 0, 0.05, 0.45); }
     else if (h) { const m = put(hd, sph(0.47, 14, 8), mat('#8a5a3a'), 0, 0.15, -0.02); m.scale.set(1, 0.6, 1); }
+    else if (cls === 'druid') { put(hd, sph(0.5, 14, 10), mat('#4a7a2a'), 0, 0.1, -0.04).scale.set(1, 0.9, 1); for (let i = 0; i < 6; i++) { const lf = put(hd, sph(0.14, 6, 5), mat(i % 2 ? '#6aaa3a' : '#3a8a2a'), Math.cos(i) * 0.42, 0.42 + (i % 3) * 0.06, Math.sin(i) * 0.42); lf.scale.set(1, 0.4, 1.6); } }
+    else if (cls === 'necro') { const hood = put(hd, sph(0.52, 14, 10), mat('#2a2238'), 0, 0.06, -0.06); hood.scale.set(1, 1.05, 1.05); put(hd, cone(0.3, 0.5, 8), mat('#2a2238'), 0, 0.55, -0.15).rotation.x = -0.4; }
     else if (cls === 'sorc') { put(hd, sph(0.47, 14, 10), mat('#f2d26a'), 0, 0.1, -0.06).scale.set(1, 0.85, 1); put(hd, box(0.9, 0.9, 0.2), mat('#f2d26a'), 0, -0.2, -0.32); }
     else if (cls === 'ranger') { put(hd, cone(0.55, 0.7, 10), mat('#3a7a3a'), 0, 0.42, -0.05); }
     else put(hd, sph(0.47, 14, 10), mat('#5a3a1a'), 0, 0.12, -0.04).scale.set(1, 0.7, 1);
   };
   const bodyT = equip.body ? BASES[equip.body.base].tier : 0;
-  const g = biped({ skin: '#f2c9a0', shirt: bodyT >= 3 ? '#c8ccd8' : bodyT === 2 ? '#8a8a9a' : col, pants: cls === 'sorc' ? '#3a2a6a' : '#4a3a2a', head });
+  const g = biped({ skin: cls === 'necro' ? '#e0dcd0' : '#f2c9a0', shirt: bodyT >= 3 ? '#c8ccd8' : bodyT === 2 ? '#8a8a9a' : col, pants: cls === 'sorc' ? '#3a2a6a' : cls === 'necro' ? '#1a1424' : cls === 'druid' ? '#5a4a2a' : '#4a3a2a', head });
   const u = g.userData;
-  if (cls === 'sorc' && !equip.body) put(u.body, cone(0.45, 0.8, 10), mat(col), 0, 0.55, 0);
+  if ((cls === 'sorc' || cls === 'necro') && !equip.body) put(u.body, cone(0.45, 0.8, 10), mat(col), 0, 0.55, 0);
   if (bodyT >= 2) for (const s of [-1, 1]) put(u.body, sph(0.16, 8, 6), mat(bodyT >= 3 ? '#e8d07a' : '#a8a8b8'), s * 0.38, 1.25, 0);
   const w = equip.weapon && BASES[equip.weapon.base];
   if (w) u.handR.add(weaponMesh(w.type, w.tier));
@@ -86,8 +88,8 @@ export function makeHero(cls, equip = {}) {
 }
 
 // ------------------------------------------------------------------ monsters
-export function makeMob(id) {
-  const M = MOBS[id], c = M.color;
+export function makeMob(id0) {
+  const A = MOBS[id0], id = A.model || id0, M = MOBS[id], c = A.color || M.color;
   let g;
   const skull = (hd) => { put(hd, box(0.5, 0.18, 0.1), mat('#2a2018'), 0, -0.2, 0.36); };
   if (id === 'skeleton' || id === 'archer' || id === 'boneking') {
@@ -146,8 +148,8 @@ export function makeMob(id) {
     for (const s of [-1, 1]) { const w = put(u.body, geo('dwing', () => { const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.lineTo(1.6, 0.9); sh.lineTo(1.9, -0.4); sh.lineTo(0.9, -0.1); sh.lineTo(0, -0.4); return new THREE.ShapeGeometry(sh); }), mat('#4a0a1a', { side: THREE.DoubleSide }), s * 0.3, 1.2, -0.3); w.rotation.y = s > 0 ? -0.3 : Math.PI + 0.3; w.userData.wing = s; }
     u.handR.add(weaponMesh('axe', 3));
   }
-  g.scale.multiplyScalar(M.size);
-  g.userData.id = id;
+  g.scale.multiplyScalar(A.size || M.size);
+  g.userData.id = id0;
   return outline(g);
 }
 // animation for people and monsters. Every joint eases toward a target pose, so moves blend instead of snapping.

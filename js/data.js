@@ -1,13 +1,16 @@
 // Duskhold: classes and skills, monsters, item bases, affixes and uniques. Names are [中文, English].
+import { buildSkills } from './skillgen.js?v=3';
 
 // ------------------------------------------------------------------ classes
 export const CLASSES = {
   warrior: { n: ['戰士', 'Warrior'], icon: '🛡️', color: '#c8503a', base: { str: 30, dex: 20, vit: 25, ene: 10 }, life: 60, mana: 10, desc: ['近戰專家：重擊、跳斬、戰吼和旋風斬', 'Melee expert: Bash, Leap, War Cry and Whirlwind'] },
   ranger: { n: ['遊俠', 'Ranger'], icon: '🏹', color: '#4a9a4a', base: { str: 20, dex: 30, vit: 20, ene: 15 }, life: 50, mana: 15, desc: ['弓箭手：多重箭、冰霜箭、爆裂箭和箭雨', 'Archer: Multishot, Frost Arrow, Explosive Arrow and Arrow Rain'] },
+  druid: { n: ['德魯伊', 'Druid'], icon: '🐻', color: '#6a8a3a', base: { str: 20, dex: 20, vit: 25, ene: 20 }, life: 55, mana: 20, desc: ['自然之力：熔岩與風暴、狼人熊人變身、召喚野獸', 'Nature’s power: magma and storms, wolf and bear forms, summoned beasts'] },
+  necro: { n: ['死靈法師', 'Necromancer'], icon: '💀', color: '#5a4a7a', base: { str: 15, dex: 25, vit: 15, ene: 25 }, life: 45, mana: 25, desc: ['亡者之術：白骨與劇毒、召喚骷髏大軍、詛咒敵人', 'The dead obey: bone and poison, skeleton armies, curses'] },
   sorc: { n: ['法師', 'Sorceress'], icon: '🔮', color: '#5a6ae8', base: { str: 10, dex: 20, vit: 15, ene: 35 }, life: 40, mana: 35, desc: ['元素法術：火球、冰霜新星、閃電鏈、傳送和隕石', 'Elements: Fireball, Frost Nova, Chain Lightning, Teleport and Meteor'] },
 };
 // skills: req = character level; kind: melee | bow | spell | passive | buff; mana and numbers grow with skill level (lv 1–20)
-export const SKILLS = {
+const BASE_SKILLS = {
   bash: { cls: 'warrior', req: 1, kind: 'melee', icon: '🔨', n: ['重擊', 'Bash'], mana: (l) => 2, pct: (l) => 40 + 12 * l, d: ['揮出重擊，傷害 +{pct}%，擊退敵人', 'A heavy blow: +{pct}% damage, knocks back'] },
   ironskin: { cls: 'warrior', req: 3, kind: 'passive', icon: '🪨', n: ['鐵壁', 'Iron Skin'], def: (l) => 20 + 10 * l, res: (l) => 2 * l, d: ['被動：防禦 +{def}%，所有抗性 +{res}', 'Passive: +{def}% defence, +{res} to all resistances'] },
   leap: { cls: 'warrior', req: 6, kind: 'melee', icon: '🦘', cd: 3, n: ['跳斬', 'Leap Attack'], mana: (l) => 8, pct: (l) => 100 + 15 * l, r: 2.8, d: ['跳到目標處，對周圍造成 {pct}% 傷害', 'Leap to the target and hit everything around for {pct}%'] },
@@ -27,7 +30,10 @@ export const SKILLS = {
   teleport: { cls: 'sorc', req: 18, kind: 'spell', icon: '✨', cd: 0.4, n: ['傳送', 'Teleport'], mana: (l) => Math.max(5, 16 - l), d: ['瞬間移動到指定位置', 'Blink to the chosen spot'] },
   meteor: { cls: 'sorc', req: 24, kind: 'spell', icon: '☄️', cd: 1, n: ['隕石', 'Meteor'], mana: (l) => 20, fire: (l) => 40 + 18 * l, r: 3.2, d: ['1 秒後隕石落下：{fire} 火焰傷害並留下火焰', 'A meteor lands after 1 s: {fire} fire damage and burning ground'] },
 };
-export const SKILL_ORDER = { warrior: ['bash', 'ironskin', 'leap', 'warcry', 'frenzy', 'whirl'], ranger: ['power', 'evasion', 'multi', 'frost', 'explode', 'rain'], sorc: ['fireball', 'shield', 'nova', 'chain', 'teleport', 'meteor'] };
+// every class has five trees of 40 skills (skillgen.js); the hand-made skills above are signature skills inside them
+const BUILT = buildSkills(BASE_SKILLS);
+export const SKILLS = BUILT.SKILLS, TREES = BUILT.TREES;
+export const SKILL_ORDER = Object.fromEntries(Object.entries(TREES).map(([c, t]) => [c, t.flatMap((x) => x.skills)]));
 export const MAX_SKILL = 20, MAX_LEVEL = 60;
 export const xpFor = (lv) => Math.round(80 * Math.pow(lv, 2.05));
 
@@ -57,6 +63,19 @@ export const MOBS = {
   // bosses
   boneking: { n: ['骷髏王', 'The Bone King'], hp: 900, dmg: 10, def: 30, speed: 3.2, ai: 'boss', xp: 900, size: 2.2, color: '#f0e8d0', boss: true, summon: 'skeleton' },
   queen: { n: ['沙蠍女王', 'The Scorpion Queen'], hp: 1500, dmg: 13, def: 40, speed: 3.6, ai: 'boss', xp: 1800, size: 2.4, color: '#c87a3a', boss: true, summon: 'scarab', el: 'poison' },
+  // allies (summons, traps, shapeshift forms) borrow a monster's model with their own colour
+  a_wolf: { n: ['靈狼', 'Spirit Wolf'], model: 'hound', color: '#9aa8c8', size: 0.9, speed: 6, ally: true },
+  a_bear: { n: ['熊靈', 'Spirit Bear'], model: 'hound', color: '#7a5a3a', size: 1.45, speed: 4.5, ally: true },
+  a_hawk: { n: ['獵鷹', 'Hawk'], model: 'bat', color: '#c8a070', size: 0.9, speed: 7, ally: true },
+  a_raven: { n: ['烏鴉', 'Raven'], model: 'bat', color: '#2a2a3a', size: 0.8, speed: 7, ally: true },
+  a_cat: { n: ['靈貓', 'Spirit Cat'], model: 'hound', color: '#d8b87a', size: 0.75, speed: 6.5, ally: true },
+  a_vine: { n: ['藤蔓', 'Vine'], model: 'naga', color: '#4a9a3a', size: 1, speed: 0, ally: true, ranged: true },
+  a_spirit: { n: ['精靈', 'Spirit'], model: 'wraith', color: '#9affc8', size: 0.9, speed: 5, ally: true, ranged: true },
+  a_skelwar: { n: ['骷髏戰士', 'Skeleton Warrior'], model: 'skeleton', color: '#e8e0c8', size: 1, speed: 4.5, ally: true },
+  a_skelmage: { n: ['骷髏法師', 'Skeleton Mage'], model: 'naga', color: '#c8b8e8', size: 0.95, speed: 4, ally: true, ranged: true },
+  a_golem: { n: ['魔像', 'Golem'], model: 'knight', color: '#8a8a7a', size: 1.3, speed: 3.6, ally: true },
+  a_sentry: { n: ['雷擊哨塔', 'Shock Sentry'], model: 'scarab', color: '#7ab8ff', size: 0.7, speed: 0, ally: true, ranged: true },
+  a_totem: { n: ['圖騰', 'Totem'], model: 'naga', color: '#c8783a', size: 0.8, speed: 0, ally: true, ranged: true },
   lord: { n: ['深淵領主', 'The Abyss Lord'], hp: 2600, dmg: 17, def: 55, speed: 3.4, ai: 'boss', xp: 3600, size: 2.8, color: '#8a1a2a', boss: true, summon: 'fireimp', el: 'fire' },
 };
 export const mobStats = (id, mlvl, diff = 0) => {

@@ -1,5 +1,5 @@
 // A character's numbers from their class, stat points, level, skills and gear; hit chances and damage.
-import { CLASSES, SKILLS, BASES, DIFFS } from './data.js?v=1';
+import { CLASSES, SKILLS, BASES, DIFFS } from './data.js?v=2';
 
 export const EQUIP_SLOTS = ['head', 'amulet', 'weapon', 'body', 'offhand', 'gloves', 'belt', 'ring1', 'ring2', 'boots'];
 // ch: { cls, lvl, alloc: {str,dex,vit,ene}, skills: {id: lv}, equip: {slot: item}, diff }

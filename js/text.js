@@ -14,7 +14,7 @@ export const STR = {
     champ: '精英', unique: '首領', minion: '手下', keys: 'WASD/點擊 移動 · 左鍵 攻擊 · 右鍵 施放技能 · Q E R F 技能 · 1 2 3 藥水 · T 回城 · I 物品 · C 角色 · K 技能 · Tab 地圖 · Z X 轉視角',
     touchKeys: '左邊搖桿移動 · 右下按鈕攻擊和施放技能',
     help: '怎麼玩', helpBody: ['在營地從傳送點或「前往地下」進入地下城。每一層找到往下的樓梯，第四層是魔王的巢穴。', '點擊怪物攻擊，右鍵或 Q E R F 施放技能。升級會得到 5 點屬性點和 1 點技能點。', '怪物會掉落裝備：白色普通、藍色魔法、黃色稀有、金色暗金。點地上的名字撿起來，在角色畫面裝備。', '按 1 喝治療藥水、2 喝法力藥水、3 喝回復藥水。T 打開回城傳送門，回到營地買賣、存放物品後可以走傳送門回去。', '打倒三大魔王後會解鎖惡夢和地獄難度，怪物更強、寶物更好。'],
-    sound: '音效', lang: 'English', options: '設定', quit: '回到角色選擇',
+    padKeys: '🎮 手把：左搖桿移動 · 右搖桿轉視角 · A 攻擊／撿東西／對話（按住連續攻擊）· X Y B RB 技能 · 十字鍵 ↑治療 ↓法力 ←回復 →回城 · Start 物品 · Back 地圖 · 按下左搖桿 技能 · LB LT 轉 45°', sound: '音效', lang: 'English', options: '設定', quit: '回到角色選擇',
   },
   en: {
     title: 'Duskhold', sub: 'Descend through the catacombs, the sunken temple and the abyss, slay three great evils and claim legendary loot!', newChar: 'New character', play: 'Play', del: 'Delete', name: 'Name', pick: 'Choose a class', create: 'Create', back: 'Back', delQ: 'Press again to delete',
@@ -30,6 +30,6 @@ export const STR = {
     champ: 'Champion', unique: 'Unique', minion: 'Minion', keys: 'WASD/click to move · left-click attack · right-click cast · Q E R F skills · 1 2 3 potions · T town portal · I items · C character · K skills · Tab map · Z X turn',
     touchKeys: 'Left stick to move · buttons bottom right to attack and cast',
     help: 'How to play', helpBody: ['From the camp, take the waypoint or “Go below” into the dungeons. Find the stairs down on each level; the fourth level is the boss’s lair.', 'Click monsters to attack; right-click or Q E R F to cast skills. Each level brings 5 stat points and 1 skill point.', 'Monsters drop gear: white normal, blue magic, yellow rare, gold unique. Click names on the ground to pick them up and equip them in the character screen.', 'Press 1 for a healing potion, 2 for mana, 3 for rejuvenation. T opens a town portal: trade and stash in camp, then step back through.', 'Beat all three bosses to unlock Nightmare and Hell: stronger monsters, better treasure.'],
-    sound: 'Sound', lang: '中文', options: 'Options', quit: 'Back to character select',
+    padKeys: '🎮 Controller: left stick move · right stick camera · A attack / pick up / talk (hold to keep attacking) · X Y B RB skills · D-pad ↑ heal ↓ mana ← rejuvenation → town portal · Start bag · Back map · LS click skills · LB LT turn 45°', sound: 'Sound', lang: '中文', options: 'Options', quit: 'Back to character select',
   },
 };

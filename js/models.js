@@ -1,7 +1,7 @@
 // Models in the Breezy Isle look (four-step cel shading, dark brown outlines): heroes that wear what they equip,
 // every monster and boss, and the dungeon's props.
 import * as THREE from 'three';
-import { MOBS, BASES, CLASSES } from './data.js?v=1';
+import { MOBS, BASES, CLASSES } from './data.js?v=2';
 
 export const GRAD = (() => { const d = new Uint8Array([70, 150, 210, 255]); const t = new THREE.DataTexture(d, 4, 1, THREE.RedFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
 const mats = new Map();
@@ -99,7 +99,7 @@ export function makeMob(id) {
   } else if (id === 'zombie' || id === 'mummy' || id === 'knight') {
     g = biped({ skin: c, shirt: id === 'knight' ? '#3a1a1a' : id === 'mummy' ? '#e8dcb8' : '#5a6a4a', pants: id === 'knight' ? '#2a1010' : '#4a4a3a', hunch: id === 'zombie' ? 0.35 : 0, eyes: id === 'knight' ? '#ff5a2a' : '#1a1410', eyeGlow: id === 'knight',
       head: (hd) => { if (id === 'mummy') for (let i = 0; i < 4; i++) put(hd, cyl(0.46, 0.46, 0.06, 12), mat('#d8c8a0'), 0, -0.25 + i * 0.16, 0).rotation.z = (i % 2 ? 0.15 : -0.15); if (id === 'knight') { put(hd, sph(0.48, 12, 8), mat('#3a2a2a'), 0, 0.05, 0).scale.set(1, 0.9, 1); for (const s of [-1, 1]) { const h = put(hd, cone(0.1, 0.5, 6), mat('#e8e0c8'), s * 0.35, 0.45, 0); h.rotation.z = -s * 0.5; } } } });
-    const u = g.userData; u.armL.rotation.x = u.armR.rotation.x = id === 'knight' ? 0 : -1.4;
+    const u = g.userData; if (id !== 'knight') u.armBase = -1.4;
     if (id === 'knight') u.handR.add(weaponMesh('sword', 3));
   } else if (id === 'imp' || id === 'fireimp') {
     g = biped({ skin: c, shirt: c, pants: c, eyes: '#ffe25a', eyeGlow: true, head: (hd) => { for (const s of [-1, 1]) { const h = put(hd, cone(0.08, 0.35, 5), mat('#3a1a1a'), s * 0.25, 0.42, 0); h.rotation.z = -s * 0.4; } } });
@@ -150,22 +150,49 @@ export function makeMob(id) {
   g.userData.id = id;
   return outline(g);
 }
-// animation for people and monsters: speed 0..1, act: '' | 'attack' | 'cast'
-export function animate(g, dt, speed, act = '', actT = 0) {
-  const u = g.userData; u.phase += dt * (5 + speed * 9);
-  const s = Math.min(1, speed), sw = Math.sin(u.phase) * 0.8 * s;
-  if (u.legL) { u.legL.rotation.x = sw; u.legR.rotation.x = -sw; }
-  if (u.armL) {
-    let ar = sw * 0.7;
-    if (act === 'attack') ar = u.bow ? -1.5 : -2.4 + Math.min(1, actT * 6) * 2.8;
-    else if (act === 'cast') ar = -2.2 + Math.sin(actT * 12) * 0.2;
-    u.armR.rotation.x = ar; if (!u.zombie) u.armL.rotation.x = u.bow && act === 'attack' ? -1.5 : -sw * 0.7;
+// animation for people and monsters. Every joint eases toward a target pose, so moves blend instead of snapping.
+//   speed 0..1+ · act '' | 'attack' | 'cast' · actT seconds into the act · dur the act's length · hit 0..1 a flinch
+// A melee swing has three beats: wind-up (arm back, body twists away), strike (fast, body whips through, leans in)
+// and follow-through; a bow is drawn and released; a spell is gathered with both hands and thrown.
+const ease = (a, b, k) => a + (b - a) * k;
+export function swingPose(p) {
+  // p 0..1 through the swing → [arm angle, body twist, lean]
+  if (p < 0.38) { const q = p / 0.38, e = q * q * (3 - 2 * q); return [-2.7 * e, 0.55 * e, -0.12 * e]; }
+  if (p < 0.55) { const q = (p - 0.38) / 0.17, e = 1 - (1 - q) * (1 - q); return [-2.7 + 3.5 * e, 0.55 - 1.15 * e, -0.12 + 0.42 * e]; }
+  const q = Math.min(1, (p - 0.55) / 0.45), e = q * q * (3 - 2 * q); return [0.8 * (1 - e), -0.6 * (1 - e), 0.3 * (1 - e)];
+}
+export function animate(g, dt, speed, act = '', actT = 0, dur = 0.5, hit = 0) {
+  const u = g.userData; const s = Math.min(1.2, speed);
+  u.phase += dt * (3 + s * 10); u.t = (u.t || 0) + dt;
+  const k = 1 - Math.exp(-dt * 16), kf = 1 - Math.exp(-dt * 30);
+  const sw = Math.sin(u.phase) * 0.85 * Math.min(1, s);
+  let legL = sw, legR = -sw, armR = -sw * 0.65, armL = sw * 0.65, armRz = 0, armLz = 0, twist = 0, lean = s * 0.14, bob = Math.abs(Math.sin(u.phase)) * 0.07 * Math.min(1, s), head = 0;
+  if (s < 0.05) { const br = Math.sin(u.t * 2.2); armR = 0.06 + br * 0.04; armL = 0.06 - br * 0.04; bob = br * 0.015; lean = 0.02; }
+  const p = Math.min(1, actT / Math.max(0.05, dur));
+  let fast = false;
+  if (act === 'attack' && u.bow) {
+    // draw: bow arm forward, string hand pulls back; release at 70%
+    const d = Math.min(1, p / 0.7); armL = -1.55; armLz = -0.15; armR = -1.45 * d; armRz = 0.35 * d; twist = -0.35 * d; head = 0.15;
+    if (p > 0.7) { armR = -1.2; armRz = -0.2; twist = -0.15; fast = true; }
+  } else if (act === 'attack') { const [a, tw, ln] = swingPose(p); armR = a; armRz = -0.2 + (p > 0.38 && p < 0.6 ? 0.5 : 0); twist = tw; lean = ln + s * 0.1; armL = -0.4 - tw * 0.6; fast = p > 0.35 && p < 0.6; }
+  else if (act === 'cast') { const up = p < 0.45 ? p / 0.45 : 1, thr = p < 0.45 ? 0 : Math.min(1, (p - 0.45) / 0.2); armR = armL = -1.9 * up + 0.5 * thr; armRz = -0.35 * up; armLz = 0.35 * up; lean = -0.12 * up + 0.22 * thr; fast = thr > 0; }
+  if (u.armBase !== undefined && !act) { armR = u.armBase + sw * 0.25; armL = u.armBase - sw * 0.25; }
+  lean -= hit * 0.35; twist += hit * 0.2 * Math.sin(u.t * 40);
+  const kk = fast ? kf : k;
+  if (u.legL) { u.legL.rotation.x = ease(u.legL.rotation.x, legL, k); u.legR.rotation.x = ease(u.legR.rotation.x, legR, k); }
+  if (u.armR) {
+    u.armR.rotation.x = ease(u.armR.rotation.x, armR, kk); u.armR.rotation.z = ease(u.armR.rotation.z, armRz, kk);
+    u.armL.rotation.x = ease(u.armL.rotation.x, armL, kk); u.armL.rotation.z = ease(u.armL.rotation.z, armLz, kk);
   }
+  if (u.head) u.head.rotation.x = ease(u.head.rotation.x, head - lean * 0.4, k);
+  u.body.rotation.x = ease(u.body.rotation.x, u.float ? 0 : lean, kk);
+  u.body.rotation.y = ease(u.body.rotation.y, twist, kk);
   if (u.wings) for (const w of u.wings) w.rotation.z = Math.sin(u.phase * 3) * 0.7 * (w.position.x > 0 ? 1 : -1);
-  if (u.legs) u.legs.forEach((l, i) => { l.rotation.x = Math.sin(u.phase + (i % 2 ? Math.PI : 0) + (i > 1 ? Math.PI / 2 : 0)) * 0.6 * s; });
-  if (u.float) u.body.position.y = Math.sin(u.phase * 0.6) * 0.15;
-  else u.body.position.y = Math.abs(Math.sin(u.phase)) * 0.06 * s;
-  g.traverse((o) => { if (o.userData.wing) o.rotation.x = Math.sin(u.phase * 0.8) * 0.3; });
+  if (u.legs) u.legs.forEach((l, i) => { l.rotation.x = ease(l.rotation.x, Math.sin(u.phase + (i % 2 ? Math.PI : 0) + (i > 1 ? Math.PI / 2 : 0)) * 0.7 * Math.min(1, s), k); });
+  const y = u.float ? Math.sin(u.t * 2.4) * 0.15 : bob;
+  u.body.position.y = ease(u.body.position.y, y, k);
+  if (u.crawl || u.quad) u.body.rotation.x = ease(u.body.rotation.x, act === 'attack' ? (p < 0.4 ? -0.25 : 0.2) : 0, kk);
+  g.traverse((o) => { if (o.userData.wing) o.rotation.x = Math.sin(u.t * 3) * 0.3; });
 }
 
 // ------------------------------------------------------------------ props and places

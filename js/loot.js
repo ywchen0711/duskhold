@@ -1,5 +1,5 @@
 // Items: rolling drops (base, rarity, affixes), naming them, and what they are worth.
-import { BASES, AFFIXES, UNIQUES, RARE_A, RARE_B, POTIONS } from './data.js?v=1';
+import { BASES, AFFIXES, UNIQUES, RARE_A, RARE_B, POTIONS } from './data.js?v=2';
 
 export function rng(seed) { let s = seed >>> 0 || 1; return () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const pick = (list, r) => list[Math.floor(r() * list.length)];

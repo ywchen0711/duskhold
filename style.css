@@ -129,3 +129,6 @@ hr { border: 0; border-top: 1px solid rgba(232, 192, 112, .25); margin: 6px 0; }
 .acts .key.sel { background: var(--gold); color: #1a0a06; }
 .wps { display: flex; flex-direction: column; gap: 4px; } .wpb { text-align: left; border: 1px solid var(--gold2); border-radius: 10px; background: rgba(0, 0, 0, .3); padding: 8px 12px; font-weight: 800; } .wpb:disabled { opacity: .45; }
 #winBody p { line-height: 1.55; }
+
+/* a controller's highlight in menus */
+.padfocus { outline: 3px solid var(--gold) !important; outline-offset: 2px; box-shadow: 0 0 14px rgba(232, 192, 112, .8) !important; position: relative; z-index: 1; }

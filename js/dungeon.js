@@ -1,6 +1,6 @@
 // Levels: random rooms joined by corridors on a grid of 2-stud tiles; a boss lair is one big hall; the camp is a
 // clearing with tents. Also walkability and a distance field for monsters to find you.
-import { rng } from './loot.js?v=1';
+import { rng } from './loot.js?v=2';
 export const TS = 2;
 export const WALL = 0, FLOOR = 1, PILLAR = 2;
 export const toW = (t) => t * TS + TS / 2, toT = (v) => Math.floor(v / TS);

@@ -5,13 +5,13 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { CLASSES, SKILLS, SKILL_ORDER, MAX_SKILL, MAX_LEVEL, xpFor, DIFFS, ACTS, mlvlOf, MOBS, mobStats, MODS, UNAME, UNAME2, BASES, STAT_NAMES, RARITY, POTIONS, SLOTS, SLOT_NAMES } from './data.js?v=1';
-import { rollItem, makeItem, potionFor, itemValue, rng, newUid } from './loot.js?v=1';
-import { derive, attackDamage, hitChance, mobHitChance, takeDamage } from './combat.js?v=1';
-import { genLevel, genTown, collide, field, stepOn, sees, walkAt, toT, toW, TS, FLOOR, WALL, PILLAR } from './dungeon.js?v=1';
-import { makeHero, makeMob, animate, makeProp, makeNPC, mat, glow, OUTLINE, GRAD } from './models.js?v=1';
-import { sfx } from './audio.js?v=1';
-import { STR } from './text.js?v=1';
+import { CLASSES, SKILLS, SKILL_ORDER, MAX_SKILL, MAX_LEVEL, xpFor, DIFFS, ACTS, mlvlOf, MOBS, mobStats, MODS, UNAME, UNAME2, BASES, STAT_NAMES, RARITY, POTIONS, SLOTS, SLOT_NAMES } from './data.js?v=2';
+import { rollItem, makeItem, potionFor, itemValue, rng, newUid } from './loot.js?v=2';
+import { derive, attackDamage, hitChance, mobHitChance, takeDamage } from './combat.js?v=2';
+import { genLevel, genTown, collide, field, stepOn, sees, walkAt, toT, toW, TS, FLOOR, WALL, PILLAR } from './dungeon.js?v=2';
+import { makeHero, makeMob, animate, makeProp, makeNPC, mat, glow, OUTLINE, GRAD } from './models.js?v=2';
+import { sfx } from './audio.js?v=2';
+import { STR } from './text.js?v=2';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -84,7 +84,7 @@ const THEMES = {
 const G = { area: null, act: 0, depth: 0, L: null, group: null, mobs: [], shots: [], fx: [], drops: [], props: [], torches: [], walls: null, explored: null, key: '', field: null, fieldT: 0, portal: null, townPortal: null, levels: new Map(), stairs: null, up: null, wp: null, theme: 'town', bossDead: false, exitPortal: null };
 const ch = () => SV.chars[SV.cur];
 let C = null, ST = null;          // the current character and their derived stats
-const me = { x: 0, z: 0, yaw: 0, life: 1, mana: 1, mesh: null, moveTo: null, path: null, target: null, act: '', actT: 0, atkT: 0, cds: {}, buffs: {}, whirl: 0, leap: null, regenT: 0, dead: false, speed: 0, potHeal: 0, potMana: 0, inv: 0 };
+const me = { x: 0, z: 0, yaw: 0, yawT: 0, ramp: 0, actDur: 0.5, hitK: 0, queue: [], life: 1, mana: 1, mesh: null, moveTo: null, path: null, target: null, act: '', actT: 0, atkT: 0, cds: {}, buffs: {}, whirl: 0, leap: null, regenT: 0, dead: false, speed: 0, potHeal: 0, potMana: 0, inv: 0 };
 
 function floorTexture(L, th) {
   const px = 8, N = L.N, c = document.createElement('canvas'); c.width = c.height = N * px;
@@ -222,21 +222,28 @@ function spawnMobs(L, act, depth, diff) {
 }
 function addMobMesh(m) {
   m.mesh = makeMob(m.id); m.mesh.position.set(m.x, 0, m.z); m.mesh.rotation.y = m.yaw;
-  if (m.champ || m.unique) m.mesh.scale.multiplyScalar(1.15);
   if (m.mods.includes('fire') || m.mods.includes('cold') || m.mods.includes('light')) { const aura = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.95, 20), new THREE.MeshBasicMaterial({ color: { fire: '#ff6a2a', cold: '#7ac8ff', light: '#ffe25a' }[m.el], transparent: true, opacity: 0.6, side: THREE.DoubleSide })); aura.rotation.x = -Math.PI / 2; aura.position.y = 0.05; m.mesh.add(aura); }
   G.group.add(m.mesh);
 }
 const mobName = (m) => (m.boss ? tx(m.name) : m.unique ? `${tx(m.name[0])}${SV.lang === 'zh' ? '' : ' '}${tx(m.name[1])}` : tx(MOBS[m.id].n));
+let hitStop = 0, shake = 0;
+function impact(m, opts, d) {
+  const big = opts.crit || m.boss;
+  m.squash = 1; m.hitK = 1;
+  sparks(m.x, 1 * MOBS[m.id].size, m.z, opts.crit ? '#ffcf3a' : MOBS[m.id].color, opts.crit ? 14 : 7);
+  if (opts.melee) { hitStop = Math.max(hitStop, opts.crit ? 0.09 : 0.045); shake = Math.max(shake, opts.crit ? 0.35 : 0.14); rumble(opts.crit ? 0.5 : 0.25, 0.08); }
+  else if (big) shake = Math.max(shake, 0.1);
+}
 function damageMob(m, amt, el = 'phys', opts = {}) {
   if (!m.alive) return 0;
   let d = amt;
   if (el === 'phys' && m.mods.includes('stone')) d *= 0.6;
   if (el !== 'phys' && m.el === el) d *= 0.5;
   d = Math.max(1, Math.round(d));
-  m.hp -= d; m.aggro = true; m.hitT = 0.15;
+  m.hp -= d; m.aggro = true; m.hitT = 0.15; impact(m, opts, d);
   if (opts.slow) m.slow = Math.max(m.slow, opts.slow);
   if (opts.stun) m.stun = Math.max(m.stun, opts.stun);
-  if (opts.knock) { const a = Math.atan2(m.x - me.x, m.z - me.z); [m.x, m.z] = collide(G.L, m.x + Math.sin(a) * opts.knock, m.z + Math.cos(a) * opts.knock, 0.5); }
+  { const a = Math.atan2(m.x - me.x, m.z - me.z), push = (opts.knock || (opts.melee ? 0.25 : 0.1)) * (m.boss ? 0.2 : 1) * 7; m.kx = Math.sin(a) * push; m.kz = Math.cos(a) * push; }   // a short slide back
   if (ST.ls && opts.melee) me.life = Math.min(ST.life, me.life + d * ST.ls / 100);
   floatText(m.x, m.z, String(d), opts.crit ? '#ffcf3a' : el === 'fire' ? '#ff8a4a' : el === 'cold' ? '#8ad0ff' : el === 'light' ? '#ffe87a' : '#ffffff', opts.crit ? 1.25 : 1);
   if (m.hp <= 0) killMob(m);
@@ -304,7 +311,7 @@ function hurtMe(dmg, el, from) {
   if (ST.block && !el && rnd() * 100 < ST.block * 0.8) { floatText(me.x, me.z, 'Block', '#c8d8ff'); sfx.play('thud'); return; }
   let d = takeDamage(ST, dmg, el && el !== 'phys' ? el : null);
   if (me.buffs.shield > 0) { const k = SKILLS.shield.absorb(ST.sl('shield') || 1) / 100, a = Math.min(me.mana, d * k); me.mana -= a; d -= a; }
-  me.life -= d; me.hitT = 0.2; sfx.play('hit'); flash();
+  me.life -= d; me.hitT = 0.2; me.hitK = 1; shake = Math.max(shake, 0.3); rumble(0.9, 0.18); sfx.play('hit'); flash();
   if (me.life <= 0) die();
 }
 function die() {
@@ -379,7 +386,8 @@ function cast(id, x, z, target) {
   if (!lv || S.kind === 'passive') return;
   if (G.area === 'town' && S.kind !== 'buff') return;
   if ((me.cds[id] || 0) > 0) { msg(t.cooldown, 700); return; }
-  if (me.atkT > 0 || me.leap || me.whirl > 0) return;
+  // pressed during another swing: remember it and do it the moment that swing ends (input buffering)
+  if (me.atkT > 0 || me.leap || me.whirl > 0) { me.buffer = { id, x, z, target, t: 0.6 }; return; }
   if (S.kind === 'bow' && !ST.bow) { msg(t.needBow); return; }
   if (S.kind === 'melee' && ST.bow) { msg(t.needMelee); return; }
   const cost = S.mana(lv); if (me.mana < cost) { msg(t.noMana, 700); sfx.play('fail'); return; }
@@ -394,9 +402,9 @@ function cast(id, x, z, target) {
   if (id === 'warcry') { setAct('cast', spellTime); sfx.play('boom'); ring(me.x, me.z, '#ffcf6a', S.r); const dmg = S.flat(lv) * (1 + ST.str / 200); for (const m of G.mobs) if (m.alive && Math.hypot(m.x - me.x, m.z - me.z) < S.r) damageMob(m, dmg, 'phys', { stun: 1.5 }); return; }
   if (id === 'whirl') { me.whirl = 2; me.whirlTo = { x, z }; me.whirlHit = 0; sfx.play('swing'); return; }
   if (S.kind === 'bow') {
-    setAct('attack', atkTime); sfx.play('bow');
+    setAct('attack', atkTime);
     // pct: the skill's bonus over a plain arrow (70% damage is −30)
-    const shoot = (yaw, pct, extra) => shot({ x: me.x, z: me.z, yaw, speed: 22, from: 'p', kind: 'arrow', dmg: attackDamage(ST, pct), ...extra });
+    const shoot = (yaw, pct, extra) => later(0.7 * atkTime, () => { sfx.play('bow'); shot({ x: me.x, z: me.z, yaw, speed: 24, from: 'p', kind: 'arrow', dmg: attackDamage(ST, pct), ...extra }); });
     if (id === 'power') shoot(me.yaw, S.pct(lv), { pierce: lv >= 10 ? 2 : 0 });
     else if (id === 'multi') { const n = S.count(lv); for (let i = 0; i < n; i++) shoot(me.yaw + (i - (n - 1) / 2) * (1.05 / Math.max(1, n - 1)), -30, {}); }
     else if (id === 'frost') shoot(me.yaw, 0, { cold: S.cold(lv), slow: 2, color: '#8ad0ff' });
@@ -405,7 +413,7 @@ function cast(id, x, z, target) {
     return;
   }
   setAct('cast', spellTime);
-  if (id === 'fireball') { sfx.play('fire'); shot({ x: me.x, z: me.z, yaw: me.yaw, speed: 15, from: 'p', kind: 'fireball', boom: { r: S.r, fire: S.fire(lv) * ST.spell }, color: '#ff7a2a' }); }
+  if (id === 'fireball') { const yaw = me.yaw; later(0.22, () => { sfx.play('fire'); shot({ x: me.x, z: me.z, yaw: me.yaw, speed: 15, from: 'p', kind: 'fireball', boom: { r: S.r, fire: S.fire(lv) * ST.spell }, color: '#ff7a2a', yaw }); }); }
   else if (id === 'nova') { sfx.play('frost'); ring(me.x, me.z, '#9ad8ff', S.r); for (const m of G.mobs) if (m.alive && Math.hypot(m.x - me.x, m.z - me.z) < S.r) damageMob(m, S.cold(lv) * ST.spell, 'cold', { slow: 2.5 }); }
   else if (id === 'chain') {
     sfx.play('zap'); let from = { x: me.x, z: me.z }, cur = target && target.alive ? target : nearestTo(x, z, 9, new Set()); const hit = new Set();
@@ -418,15 +426,29 @@ function cast(id, x, z, target) {
 const reach = (m) => 1.2 + MOBS[m.id].size * 0.6;
 function reachable(x, z) { const f = field(G.L, toT(me.x), toT(me.z)); return f[toT(z) * G.L.N + toT(x)] >= 0; }
 function nearestTo(x, z, r, skip) { let b = null, bd = r; for (const m of G.mobs) { if (!m.alive || skip.has(m)) continue; const d = Math.hypot(m.x - x, m.z - z); if (d < bd) { bd = d; b = m; } } return b; }
-function setAct(a, t) { me.act = a; me.actT = 0; me.atkT = t; }
+function setAct(a, t) { me.act = a; me.actT = 0; me.atkT = t; me.actDur = t; }
+// do something partway through the current act (the strike of a swing, the release of an arrow or spell)
+const later = (t, fn) => me.queue.push({ t, fn });
 function meleeSwing(m, pct = 0, opts = {}) {
-  setAct('attack', 1 / ST.aps); sfx.play('swing');
-  me.pending = { m, pct, opts, t: 0.4 / ST.aps };
+  setAct('attack', 1 / ST.aps); later(0.38 / ST.aps, () => { sfx.play('swing'); slash(me.yaw); });
+  me.pending = { m, pct, opts, t: 0.45 / ST.aps };
+}
+function slash(yaw, color = '#fff4d0', r = 1.9) {
+  // a flat arc whose middle points along the group's +Z, turned to face where the hero swings
+  const arc = new THREE.Mesh(new THREE.RingGeometry(r * 0.45, r, 24, 1, -Math.PI / 2 - 0.9, 1.8), fxMat(color, 0.75)); arc.material.blending = THREE.AdditiveBlending;
+  arc.rotation.x = -Math.PI / 2;
+  const m = new THREE.Group(); m.add(arc); m.rotation.y = yaw; m.position.set(me.x, 1.05, me.z); m.material = arc.material;
+  G.group.add(m); G.fx.push({ kind: 'slash', mesh: m, t: 0.16 });
+}
+const sparkGeo = new THREE.BoxGeometry(0.09, 0.09, 0.09);
+function sparks(x, y, z, color, n = 8) {
+  const mm = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending });
+  for (let i = 0; i < n; i++) { const p = new THREE.Mesh(sparkGeo, mm); p.position.set(x, y, z); G.group.add(p); const a = rnd() * 6.28, sp = 2 + rnd() * 4; G.fx.push({ kind: 'spark', mesh: p, t: 0.3 + rnd() * 0.2, vx: Math.cos(a) * sp, vy: 2 + rnd() * 3, vz: Math.sin(a) * sp }); }
 }
 function basicAttack(m) {
   me.yaw = Math.atan2(m.x - me.x, m.z - me.z);
-  if (ST.bow) { setAct('attack', 1 / ST.aps); sfx.play('bow'); shot({ x: me.x, z: me.z, yaw: me.yaw, speed: 22, from: 'p', kind: 'arrow', dmg: attackDamage(ST, 0) }); return; }
-  if (ch().cls === 'sorc' && ST.weapon && BASES[ST.weapon.base].type === 'wand') { setAct('cast', 1 / ST.aps); shot({ x: me.x, z: me.z, yaw: me.yaw, speed: 16, from: 'p', kind: 'bolt', dmg: attackDamage(ST, 0), color: '#c87aff' }); return; }
+  if (ST.bow) { setAct('attack', 1 / ST.aps); later(0.7 / ST.aps, () => { sfx.play('bow'); shot({ x: me.x, z: me.z, yaw: me.yaw, speed: 24, from: 'p', kind: 'arrow', dmg: attackDamage(ST, 0) }); }); return; }
+  if (ch().cls === 'sorc' && ST.weapon && BASES[ST.weapon.base].type === 'wand') { setAct('cast', 1 / ST.aps); later(0.5 / ST.aps, () => shot({ x: me.x, z: me.z, yaw: me.yaw, speed: 18, from: 'p', kind: 'bolt', dmg: attackDamage(ST, 0), color: '#c87aff' })); return; }
   meleeSwing(m, 0);
 }
 // projectiles
@@ -458,7 +480,7 @@ function bossDefeated(m) {
 }
 function openExit(st) {
   const L = st.L, x = L.bossAt.x, z = L.bossAt.z + 3, pm = makeProp('portal'); pm.position.set(x, 0, z); G.group.add(pm);
-  G.exitPortal = { x, z };
+  G.exitPortal = { x, z, armed: Math.hypot(me.x - x, me.z - z) > 2.5 };   // it only takes you once you have stepped away and come back
 }
 function townPortal() {
   const c = ch(), t = tr();
@@ -473,7 +495,9 @@ let last = performance.now(), hudT = 0, titleN = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
-  if (started) update(dt, now);
+  pollPad(dt);
+  if (hitStop > 0) { hitStop -= dt; }
+  if (started) update(hitStop > 0 ? dt * 0.06 : dt, now);
   if (started || (titleN++ % 6) === 0) composer.render();
 }
 function update(dt, now) {
@@ -497,7 +521,8 @@ function update(dt, now) {
     if (G.stairs && Math.hypot(G.stairs.x - me.x, G.stairs.z - me.z) < 1.2) enterLevel(G.act, G.depth + 1, 'down');
     else if (G.up && Math.hypot(G.up.x - me.x, G.up.z - me.z) < 1.1) { if (G.depth === 0) enterTown(false); else enterLevel(G.act, G.depth - 1, 'up'); }
     else if (G.portal && Math.hypot(G.portal.x - me.x, G.portal.z - me.z) < 1.1 && me.moveTo) { G.townPortal = null; enterTown(false); }
-    else if (G.exitPortal && Math.hypot(G.exitPortal.x - me.x, G.exitPortal.z - me.z) < 1.2) { if (G.act < 2) enterLevel(G.act + 1, 0, 'start'); else { G.townPortal = null; enterTown(false); } }
+    else if (G.exitPortal && !G.exitPortal.armed && Math.hypot(G.exitPortal.x - me.x, G.exitPortal.z - me.z) > 2.5) G.exitPortal.armed = true;
+    else if (G.exitPortal && G.exitPortal.armed && Math.hypot(G.exitPortal.x - me.x, G.exitPortal.z - me.z) < 1.2) { if (G.act < 2) enterLevel(G.act + 1, 0, 'start'); else { G.townPortal = null; enterTown(false); } }
     else if (G.wp && Math.hypot(G.wp.x - me.x, G.wp.z - me.z) < 1.4 && me.moveTo && Math.hypot(me.moveTo.x - G.wp.x, me.moveTo.z - G.wp.z) < 1.6) { me.moveTo = null; openWin('wp'); }
   } else {
     const S = L.spots;
@@ -511,12 +536,15 @@ function update(dt, now) {
   // hero mesh
   me.mesh.position.set(me.x, me.leap ? Math.sin(Math.min(1, me.leap.t / 0.45) * Math.PI) * 2 : 0, me.z);
   me.mesh.rotation.y = me.whirl > 0 ? me.mesh.rotation.y + dt * 18 : me.yaw;
-  animate(me.mesh, dt, me.speed, me.act && me.actT < 0.5 ? me.act : '', me.actT);
+  me.speedShown = me.speed;
+  me.hitK = Math.max(0, me.hitK - dt * 5);
+  animate(me.mesh, dt, me.speed, me.act && me.actT < me.actDur ? me.act : '', me.actT, me.actDur, me.hitK);
   me.mesh.visible = !me.dead;
   // camera
   if (keys.has('KeyZ')) camYaw += dt * 2; if (keys.has('KeyX')) camYaw -= dt * 2;
   const dist = 15 * camZoom, pitch = 0.98;
-  camera.position.set(me.x + Math.sin(camYaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist + 1, me.z + Math.cos(camYaw) * Math.cos(pitch) * dist); camera.lookAt(me.x, 1, me.z);
+  shake = Math.max(0, shake - dt * 1.6); const sx = (rnd() - 0.5) * shake, sy = (rnd() - 0.5) * shake;
+  camera.position.set(me.x + Math.sin(camYaw) * Math.cos(pitch) * dist + sx, Math.sin(pitch) * dist + 1 + sy, me.z + Math.cos(camYaw) * Math.cos(pitch) * dist); camera.lookAt(me.x + sx * 0.5, 1, me.z);
   heroLight.position.set(me.x, 4.5, me.z);
   sun.position.set(me.x - 20, 40, me.z + 12); sun.target.position.set(me.x, 0, me.z);
   // the closest torches carry lights
@@ -528,8 +556,14 @@ function update(dt, now) {
   if (saveT > 0 && (saveT -= dt) <= 0) persist();
   if ((hudT -= dt) <= 0) { hudT = 0.1; drawHud(); drawMini(); }
 }
+const angLerp = (a, b, k) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * k;
 function updateHero(dt) {
   const L = G.L;
+  for (let i = me.queue.length - 1; i >= 0; i--) { const q = me.queue[i]; if ((q.t -= dt) <= 0) { me.queue.splice(i, 1); q.fn(); } }
+  if (me.buffer && (me.buffer.t -= dt) < -0.6) me.buffer = null;
+  if (me.buffer && me.atkT <= 0 && !me.leap && !(me.whirl > 0)) { const b = me.buffer; me.buffer = null; cast(b.id, b.target && b.target.alive ? b.target.x : b.x, b.target && b.target.alive ? b.target.z : b.z, b.target && b.target.alive ? b.target : null); }
+  if (me.atkT <= 0 && !me.leap) me.yaw = angLerp(me.yaw, me.yawT, 1 - Math.exp(-dt * 18)); else me.yawT = me.yaw;
+  const wasMoving = me.speed > 0;
   if (me.pending && (me.pending.t -= dt) <= 0) {
     const { m, pct, opts } = me.pending; me.pending = null;
     if (m && m.alive && Math.hypot(m.x - me.x, m.z - me.z) < reach(m) + 0.8) {
@@ -547,20 +581,21 @@ function updateHero(dt) {
     me.whirl -= dt; me.whirlHit -= dt;
     const w = me.whirlTo, d = Math.hypot(w.x - me.x, w.z - me.z);
     if (d > 0.4) { const sp = 5.5 * dt; [me.x, me.z] = collide(L, me.x + (w.x - me.x) / d * Math.min(sp, d), me.z + (w.z - me.z) / d * Math.min(sp, d), 0.45); }
-    if (me.whirlHit <= 0) { me.whirlHit = 0.3; const lv = ST.sl('whirl'); for (const m of G.mobs) if (m.alive && Math.hypot(m.x - me.x, m.z - me.z) < SKILLS.whirl.r) { const dd = attackDamage(ST, SKILLS.whirl.pct(lv)); damageMob(m, dd.phys, 'phys', { crit: dd.crit, melee: true }); } sfx.play('swing'); }
+    if (me.whirlHit <= 0) { me.whirlHit = 0.3; slash(me.mesh.rotation.y, '#ffe8a0', 2.8); const lv = ST.sl('whirl'); for (const m of G.mobs) if (m.alive && Math.hypot(m.x - me.x, m.z - me.z) < SKILLS.whirl.r) { const dd = attackDamage(ST, SKILLS.whirl.pct(lv)); damageMob(m, dd.phys, 'phys', { crit: dd.crit, melee: true }); } sfx.play('swing'); }
     me.speed = 1; return;
   }
   // holding the mouse keeps you walking / attacking toward the cursor
   if (!isTouch && mouse.down && !winOpen() && !me.target && !me.pickup) { const [gx, gz] = groundAt(mouse.x, mouse.y); if (Math.hypot(gx - me.x, gz - me.z) > 0.6) { me.moveTo = { x: gx, z: gz }; me.path = null; } }
   if (!isTouch && mouse.rdown && ch().rmb && me.atkT <= 0) castAtCursor(ch().rmb);
   // WASD or the stick: move relative to the camera
-  let mx = stick.mx, mz = stick.mz;
+  let mx = stick.mx + pad.mx, mz = stick.mz + pad.mz;
   if (!winOpen()) { if (keys.has('KeyW') || keys.has('ArrowUp')) mz -= 1; if (keys.has('KeyS') || keys.has('ArrowDown')) mz += 1; if (keys.has('KeyA') || keys.has('ArrowLeft')) mx -= 1; if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1; }
-  const sp = 5.4 * (1 + ST.fr / 100);
+  me.ramp = wasMoving ? Math.min(1, me.ramp + dt * 7) : 0.35;
+  const sp = 5.4 * (1 + ST.fr / 100) * me.ramp;
   me.speed = 0;
   if (Math.hypot(mx, mz) > 0.15 && me.atkT <= 0) {
     const cy = Math.cos(camYaw), sy = Math.sin(camYaw), wx = mx * cy + mz * sy, wz = -mx * sy + mz * cy, n = Math.hypot(wx, wz);
-    [me.x, me.z] = collide(L, me.x + wx / n * sp * dt * Math.min(1, n), me.z + wz / n * sp * dt * Math.min(1, n), 0.45); me.yaw = Math.atan2(wx, wz); me.speed = 1; me.moveTo = null; me.target = null; return;
+    [me.x, me.z] = collide(L, me.x + wx / n * sp * dt * Math.min(1, n), me.z + wz / n * sp * dt * Math.min(1, n), 0.45); me.yawT = Math.atan2(wx, wz); me.speed = Math.min(1, n); me.moveTo = null; if (!pad.attacking) me.target = null; return;
   }
   // a target: walk into reach, then attack
   if (me.target) {
@@ -580,7 +615,7 @@ function updateHero(dt) {
     const dx = nx - me.x, dz = nz - me.z, dd = Math.hypot(dx, dz) || 1, step = Math.min(dd, sp * dt);
     const [cx, cz] = collide(L, me.x + dx / dd * step, me.z + dz / dd * step, 0.45);
     if (Math.hypot(cx - me.x, cz - me.z) < step * 0.15 && dd > 0.5) { me.stuck = (me.stuck || 0) + dt; if (me.stuck > 0.6) { me.moveTo = null; me.stuck = 0; } } else me.stuck = 0;
-    me.x = cx; me.z = cz; me.yaw = Math.atan2(dx, dz); me.speed = 1;
+    me.x = cx; me.z = cz; me.yawT = Math.atan2(dx, dz); me.speed = 1;
   }
 }
 function updateMobs(dt) {
@@ -605,13 +640,17 @@ function updateMobs(dt) {
         if (m.cd <= 0 && d < 12 && sees(L, m.x, m.z, me.x, me.z)) { m.cd = 1.8 + rnd() * 0.6; m.yaw = Math.atan2(me.x - m.x, me.z - m.z); m.act = 'attack'; m.actT = 0; shot({ x: m.x, z: m.z, yaw: m.yaw, speed: MOBS[m.id].shot === 'arrow' ? 15 : 11, from: 'm', kind: MOBS[m.id].shot, dmgM: m.dmg, el: m.ai === 'caster' ? m.el : null, mlvl: m.mlvl }); }
       } else if (m.ai === 'charger' && d > 3.5 && d < 9 && m.cd <= 0 && sees(L, m.x, m.z, me.x, me.z)) { m.cd = 3.5; m.charging = 0.7; m.chargeHit = false; m.yaw = Math.atan2(me.x - m.x, me.z - m.z); }
       else if (d > R) goTo(me.x, me.z);
-      else if (m.cd <= 0) { m.cd = 1.3 + rnd() * 0.5; m.act = 'attack'; m.actT = 0; m.yaw = Math.atan2(me.x - m.x, me.z - m.z); m.swing = 0.35; }
+      else if (m.cd <= 0) { m.cd = 1.3 + rnd() * 0.5; m.act = 'attack'; m.actT = 0; m.actDur = 0.75; m.yaw = Math.atan2(me.x - m.x, me.z - m.z); m.swing = 0.75 * 0.46; }
       if (m.swing > 0 && (m.swing -= dt) <= 0 && d < R + 0.6) mobHits(m, 1);
     }
     // keep monsters from stacking
     for (const o of G.mobs) { if (o === m || !o.alive) continue; const dx = m.x - o.x, dz = m.z - o.z, dd = Math.hypot(dx, dz), want = 0.5 * (MOBS[m.id].size + MOBS[o.id].size); if (dd < want && dd > 0.001) { const push = (want - dd) * 0.5; [m.x, m.z] = collide(L, m.x + dx / dd * push, m.z + dz / dd * push, 0.4); } }
-    m.mesh.position.set(m.x, 0, m.z); m.mesh.rotation.y = m.yaw;
-    animate(m.mesh, dt, moving * (m.slow > 0 ? 0.5 : 1), m.act && m.actT < 0.5 ? m.act : '', m.actT);
+    if (m.kx || m.kz) { [m.x, m.z] = collide(L, m.x + m.kx * dt, m.z + m.kz * dt, 0.4); const f = Math.exp(-dt * 12); m.kx *= f; m.kz *= f; if (Math.abs(m.kx) + Math.abs(m.kz) < 0.05) m.kx = m.kz = 0; }
+    m.squash = Math.max(0, (m.squash || 0) - dt * 7); m.hitK = Math.max(0, (m.hitK || 0) - dt * 5);
+    const base = MOBS[m.id].size * (m.champ || m.unique ? 1.15 : 1), q = m.squash;
+    m.mesh.scale.set(base * (1 + 0.18 * q), base * (1 - 0.14 * q), base * (1 + 0.18 * q));
+    m.mesh.position.set(m.x, 0, m.z); m.mesh.rotation.y = angLerp(m.mesh.rotation.y, m.yaw, 1 - Math.exp(-dt * 14));
+    animate(m.mesh, dt, moving * (m.slow > 0 ? 0.5 : 1), m.act && m.actT < (m.actDur || 0.6) ? m.act : '', m.actT, m.actDur || 0.6, m.hitK);
   }
 }
 function mobHits(m, k) {
@@ -632,7 +671,7 @@ function bossAI(m, d, dt, goTo) {
     return;
   }
   if (d > R) goTo(me.x, me.z);
-  else if (m.cd <= 0) { m.cd = 1.5; m.act = 'attack'; m.actT = 0; m.yaw = Math.atan2(me.x - m.x, me.z - m.z); m.swing = 0.45; }
+  else if (m.cd <= 0) { m.cd = 1.5; m.act = 'attack'; m.actT = 0; m.actDur = 0.95; m.yaw = Math.atan2(me.x - m.x, me.z - m.z); m.swing = 0.95 * 0.46; }
   if (m.swing > 0 && (m.swing -= dt) <= 0 && d < R + 0.8) mobHits(m, 1.6);
 }
 function updateShots(dt) {
@@ -661,13 +700,15 @@ function updateFx(dt) {
     else if (f.kind === 'text') { f.y += dt * 1.6; _v.set(f.x, f.y, f.z).project(camera); f.el.style.transform = `translate(${(_v.x + 1) / 2 * innerWidth}px, ${(1 - _v.y) / 2 * innerHeight}px) translate(-50%, -50%)`; f.el.style.opacity = Math.min(1, f.t * 2); }
     else if (f.kind === 'rain') { f.tick -= dt; if (f.tick <= 0) { f.tick = 0.37; for (const m of G.mobs) if (m.alive && Math.hypot(m.x - f.x, m.z - f.z) < f.r) { const d = attackDamage(ST, f.pct); damageMob(m, d.phys, 'phys', { crit: d.crit }); } for (let k = 0; k < 6; k++) { const a = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 4), glow('#e8d8b0', 0.6)); a.position.set(f.x + (rnd() - 0.5) * f.r * 1.6, 3, f.z + (rnd() - 0.5) * f.r * 1.6); G.group.add(a); G.fx.push({ kind: 'fall', mesh: a, t: 0.25 }); } } }
     else if (f.kind === 'fall') f.mesh.position.y -= dt * 14;
+    else if (f.kind === 'spark') { f.vy -= 14 * dt; f.mesh.position.x += f.vx * dt; f.mesh.position.y = Math.max(0.05, f.mesh.position.y + f.vy * dt); f.mesh.position.z += f.vz * dt; f.mesh.scale.setScalar(Math.max(0.1, f.t * 3)); }
+    else if (f.kind === 'slash') { f.mesh.material.opacity = Math.max(0, f.t / 0.16) * 0.75; f.mesh.scale.setScalar(1 + (0.16 - f.t) * 2); }
     else if (f.kind === 'meteor') {
       if (!f.rock) { f.rock = new THREE.Mesh(new THREE.SphereGeometry(0.6, 10, 8), glow('#ff6a2a', 3)); f.rock.position.set(f.x - 3, 12, f.z - 3); G.group.add(f.rock); f.t0 = f.t; }
       const k = 1 - f.t / f.t0; f.rock.position.set(f.x - 3 * (1 - k), 12 * (1 - k), f.z - 3 * (1 - k));
       if (f.t <= 0) { G.group.remove(f.rock); if (f.foe) { ring(f.x, f.z, '#ff3a2a', f.r); sfx.play('boom'); if (Math.hypot(me.x - f.x, me.z - f.z) < f.r) hurtMe(f.foe, 'fire', null); } else { explode(f.x, f.z, f.r, f.fire, 'fire'); G.fx.push({ kind: 'burn', x: f.x, z: f.z, r: f.r * 0.8, t: 3, tick: 0, fire: f.fire * 0.12, mesh: areaMarker(f.x, f.z, f.r * 0.8, '#ff4a1a') }); } }
     }
     else if (f.kind === 'burn') { f.tick -= dt; if (f.tick <= 0) { f.tick = 0.5; for (const m of G.mobs) if (m.alive && Math.hypot(m.x - f.x, m.z - f.z) < f.r) damageMob(m, f.fire, 'fire'); } f.mesh.material.opacity = 0.25 + Math.sin(f.t * 12) * 0.08; }
-    if (f.t <= 0) { if (f.mesh) { G.group.remove(f.mesh); } if (f.el) f.el.remove(); G.fx.splice(i, 1); }
+    if (f.t <= 0) { if (f.mesh) { G.group.remove(f.mesh); if (f.kind === 'spark' || f.kind === 'slash') f.mesh.material.dispose(); if (f.kind === 'slash') f.mesh.children[0].geometry.dispose(); } if (f.el) f.el.remove(); G.fx.splice(i, 1); }
   }
 }
 function openProp(p) {
@@ -699,6 +740,102 @@ function placeLabels() {
 const townTags = {};
 for (const k of ['merchant', 'gambler', 'healer', 'stash', 'waypoint', 'cave']) { const el = document.createElement('div'); el.className = 'nametag npc'; $('labels').appendChild(el); townTags[k] = el; }
 
+
+// ------------------------------------------------------------------ the gamepad
+// play: left stick moves · right stick turns the camera · A attack / pick up / talk (hold to keep attacking) ·
+// X Y B RB the four skill slots · D-pad ↑ heal ↓ mana ← rejuvenation → town portal · Start bag · Back map · LS skills
+// menus: D-pad or left stick moves the highlight · A chooses · B or Start closes
+const pad = { on: false, prev: [], mx: 0, mz: 0, attacking: false, rep: 0, idx: null, name: '' };
+const PADKEY = { Q: 'X', E: 'Y', R: 'B', F: 'RB' };
+const dz = (v) => (Math.abs(v) < 0.22 ? 0 : (v - Math.sign(v) * 0.22) / 0.78);
+function rumble(strength, ms) {
+  const gp = padNow(); const a = gp && gp.vibrationActuator;
+  if (a && a.playEffect) a.playEffect('dual-rumble', { duration: ms * 1000, strongMagnitude: strength, weakMagnitude: strength * 0.6 }).catch(() => {});
+}
+const padNow = () => [...(navigator.getGamepads ? navigator.getGamepads() : [])].find((g) => g && g.connected) || null;
+function autoTarget(range = 3.2) {
+  let best = null, bs = 1e9;
+  for (const m of G.mobs) {
+    if (!m.alive) continue; const d = Math.hypot(m.x - me.x, m.z - me.z); if (d > range || !sees(G.L, me.x, me.z, m.x, m.z)) continue;
+    const a = Math.atan2(m.x - me.x, m.z - me.z) - me.yaw, off = Math.abs(Math.atan2(Math.sin(a), Math.cos(a)));
+    const sc = d + off * 2.5; if (sc < bs) { bs = sc; best = m; }
+  }
+  return best;
+}
+function padInteract() {
+  // something to pick up, someone to talk to, somewhere to go; else attack whatever is in front
+  const d = G.drops.filter((x) => Math.hypot(x.x - me.x, x.z - me.z) < 2.4).sort((a, b) => Math.hypot(a.x - me.x, a.z - me.z) - Math.hypot(b.x - me.x, b.z - me.z))[0];
+  if (d) { me.pickup = d; walkTo(d.x, d.z); return true; }
+  const spots = G.area === 'town' ? Object.entries(G.L.spots).filter(([k]) => ['merchant', 'gambler', 'stash', 'healer', 'waypoint', 'cave'].includes(k)).map(([, v]) => v) : [G.wp, G.exitPortal, G.portal].filter(Boolean);
+  const s = spots.find((p) => Math.hypot(p.x - me.x, p.z - me.z) < 2.8);
+  if (s) { walkTo(s.x, s.z); return true; }
+  return false;
+}
+function padAttack() {
+  const range = ST.bow || (ch().cls === 'sorc' && ST.weapon && BASES[ST.weapon.base].type === 'wand') ? 13 : 4.5;
+  const t = autoTarget(range);
+  if (t) { me.target = t; return; }
+  if (me.atkT <= 0 && !ST.bow) { setAct('attack', 1 / ST.aps); later(0.38 / ST.aps, () => { sfx.play('swing'); slash(me.yaw); }); }   // a swing at the air still feels like something
+}
+function padCast(k) {
+  const id = ch().keys[k]; if (!id) return;
+  ch().rmb = id; const S = SKILLS[id];
+  const t = autoTarget(S.kind === 'melee' ? 5 : 14);
+  const far = id === 'teleport' ? 10 : 6, x = t ? t.x : me.x + Math.sin(me.yaw) * far, z = t ? t.z : me.z + Math.cos(me.yaw) * far;
+  cast(id, x, z, t); drawHud(true);
+}
+// menus: move a highlight between buttons
+function focusables() {
+  const root = !$('win').hidden ? $('win') : !$('select').hidden ? $('select') : null;
+  return root ? [...root.querySelectorAll('button:not([disabled]), .cell[data-i], .cell[data-st]')].filter((e) => e.offsetParent && e.id !== 'winX' && e.id !== 'sLang') : [];
+}
+function setFocus(el) {
+  document.querySelectorAll('.padfocus').forEach((e) => e.classList.remove('padfocus'));
+  if (!el) { tipEl.hidden = true; return; }
+  el.classList.add('padfocus'); el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  const r = el.getBoundingClientRect(); if (el.onpointerenter) el.onpointerenter({ clientX: r.right, clientY: r.top }); else tipEl.hidden = true;
+  pad.idx = focusables().indexOf(el);
+}
+function moveFocus(dx, dy) {
+  const list = focusables(); if (!list.length) return;
+  const cur = document.querySelector('.padfocus');
+  if (!cur || !list.includes(cur)) { setFocus(list[Math.min(pad.idx || 0, list.length - 1)]); return; }
+  const a = cur.getBoundingClientRect(), ax = a.left + a.width / 2, ay = a.top + a.height / 2;
+  let best = null, bs = 1e9;
+  for (const el of list) {
+    if (el === cur) continue; const b = el.getBoundingClientRect(), vx = b.left + b.width / 2 - ax, vy = b.top + b.height / 2 - ay, along = vx * dx + vy * dy;
+    if (along <= 4) continue; const side = Math.abs(vx * dy - vy * dx), sc = along + side * 2.2; if (sc < bs) { bs = sc; best = el; }
+  }
+  if (best) { setFocus(best); sfx.play('tick'); }
+}
+function pollPad(dt) {
+  const gp = padNow();
+  if (!gp) { if (pad.on) { pad.on = false; pad.mx = pad.mz = 0; document.body.classList.remove('pad'); drawHud(true); } return; }
+  if (!pad.on) { pad.on = true; document.body.classList.add('pad'); toast(SV.lang === 'zh' ? '🎮 手把已連接' : '🎮 Controller connected'); drawHud(true); }
+  const b = (i) => !!(gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.5)), hit = (i) => b(i) && !pad.prev[i];
+  const lx = dz(gp.axes[0] || 0), ly = dz(gp.axes[1] || 0), rx = dz(gp.axes[2] || 0);
+  const menu = !$('win').hidden || !$('select').hidden;
+  if (menu) {
+    pad.mx = pad.mz = 0;
+    let mx = (b(15) ? 1 : 0) - (b(14) ? 1 : 0) + (Math.abs(lx) > 0.5 ? Math.sign(lx) : 0), my = (b(13) ? 1 : 0) - (b(12) ? 1 : 0) + (Math.abs(ly) > 0.5 ? Math.sign(ly) : 0);
+    if (mx || my) { pad.rep -= dt; if (pad.rep <= 0) { moveFocus(Math.sign(mx), mx ? 0 : Math.sign(my)); pad.rep = pad.repFirst ? 0.14 : 0.35; pad.repFirst = true; } } else { pad.rep = 0; pad.repFirst = false; }
+    if (hit(0)) { const el = document.querySelector('.padfocus'); if (el) { el.click(); sfx.play('click'); requestAnimationFrame(() => { const list = focusables(); setFocus(list[Math.min(pad.idx || 0, list.length - 1)]); }); } else moveFocus(0, 1); }
+    if ((hit(1) || hit(9)) && !$('win').hidden) { closeWin(); setFocus(null); }
+  } else if (started) {
+    pad.mx = lx; pad.mz = ly; camYaw -= rx * dt * 2.6;
+    pad.attacking = b(0) || b(7);
+    if (hit(0) || hit(7)) { if (!padInteract()) padAttack(); } else if (pad.attacking && me.atkT <= 0 && !me.target) padAttack();
+    if (hit(2)) padCast('Q'); if (hit(3)) padCast('E'); if (hit(1)) padCast('R'); if (hit(5)) padCast('F');
+    if (hit(12)) drink('hp'); if (hit(13)) drink('mp'); if (hit(14)) drink('rejuv'); if (hit(15)) townPortal();
+    if (hit(9)) { openWin('inv'); requestAnimationFrame(() => moveFocus(0, 1)); }
+    if (hit(10)) { openWin('skills'); requestAnimationFrame(() => moveFocus(0, 1)); }
+    if (hit(8)) bigMap = !bigMap;
+    if (hit(4)) camYaw += Math.PI / 4; if (hit(6)) camYaw -= Math.PI / 4;
+  }
+  pad.prev = gp.buttons.map((x) => x.pressed || x.value > 0.5);
+}
+addEventListener('gamepadconnected', () => sfx.unlock && sfx.unlock());
+
 // ------------------------------------------------------------------ potions
 function drink(kind) {
   const c = ch(), t = tr(); if (me.dead || !started) return;
@@ -721,9 +858,10 @@ function drawHud(force) {
   $('xpFill').style.width = (c.lvl >= MAX_LEVEL ? 100 : c.xp / xpFor(c.lvl) * 100) + '%';
   $('lvl').textContent = t.lv(c.lvl);
   const pots = (k) => ['3', '2', '1'].reduce((a, n) => a + (c.pots[k + n] || 0), 0);
-  $('pot1').innerHTML = `🧪<b>${pots('hp')}</b><small>1</small>`; $('pot2').innerHTML = `🧴<b>${pots('mp')}</b><small>2</small>`; $('pot3').innerHTML = `💜<b>${c.pots.rejuv || 0}</b><small>3</small>`;
-  $('tpBtn').innerHTML = `📜<b>${c.tp}</b><small>T</small>`;
-  $('skillbar').innerHTML = ['Q', 'E', 'R', 'F'].map((k) => { const id = c.keys[k], S = id && SKILLS[id], cd = id ? me.cds[id] || 0 : 0; return `<button data-k="${k}" class="${c.rmb === id && id ? 'sel' : ''}" title="${S ? esc(tx(S.n)) : ''}">${S ? S.icon : ''}<small>${k}</small>${cd > 0 ? `<i>${cd.toFixed(1)}</i>` : ''}</button>`; }).join('');
+  const g = pad.on ? ['↑', '↓', '←', '→'] : ['1', '2', '3', 'T'];
+  $('pot1').innerHTML = `🧪<b>${pots('hp')}</b><small>${g[0]}</small>`; $('pot2').innerHTML = `🧴<b>${pots('mp')}</b><small>${g[1]}</small>`; $('pot3').innerHTML = `💜<b>${c.pots.rejuv || 0}</b><small>${g[2]}</small>`;
+  $('tpBtn').innerHTML = `📜<b>${c.tp}</b><small>${g[3]}</small>`;
+  $('skillbar').innerHTML = ['Q', 'E', 'R', 'F'].map((k) => { const id = c.keys[k], S = id && SKILLS[id], cd = id ? me.cds[id] || 0 : 0; return `<button data-k="${k}" class="${c.rmb === id && id ? 'sel' : ''}" title="${S ? esc(tx(S.n)) : ''}">${S ? S.icon : ''}<small>${pad.on ? PADKEY[k] : k}</small>${cd > 0 ? `<i>${cd.toFixed(1)}</i>` : ''}</button>`; }).join('');
   $('skillbar').querySelectorAll('button').forEach((b) => b.onclick = () => { const id = c.keys[b.dataset.k]; if (id) { c.rmb = id; drawHud(true); } else toggleWin('skills'); });
   if (isTouch) for (const k of ['Q', 'E', 'R', 'F']) { const id = c.keys[k]; $('t' + k).textContent = id ? SKILLS[id].icon : '·'; }
   $('alertPts').hidden = !(c.pts || c.spts);
@@ -856,7 +994,7 @@ function renderWin() {
     const tb = el.querySelector('[data-town]'); if (tb) tb.onclick = () => { closeWin(); if (G.area !== 'town') enterTown(false); };
   } else if (win === 'help') {
     $('winTitle').textContent = t.help;
-    el.innerHTML = t.helpBody.map((p) => `<p>${p}</p>`).join('') + `<p class="dim">${isTouch ? t.touchKeys : t.keys}</p><div class="row"><button id="hLang">${t.lang}</button><button id="hSnd">🔊 ${t.sound}: ${SV.sound ? 'ON' : 'OFF'}</button><button id="hQuit">${t.quit}</button></div>`;
+    el.innerHTML = t.helpBody.map((p) => `<p>${p}</p>`).join('') + `<p class="dim">${isTouch ? t.touchKeys : t.keys}</p><p class="dim">${t.padKeys}</p><div class="row"><button id="hLang">${t.lang}</button><button id="hSnd">🔊 ${t.sound}: ${SV.sound ? 'ON' : 'OFF'}</button><button id="hQuit">${t.quit}</button></div>`;
     $('hLang').onclick = () => { SV.lang = SV.lang === 'zh' ? 'en' : 'zh'; persist(); renderWin(); drawHud(true); };
     $('hSnd').onclick = () => { SV.sound = !SV.sound; sfx.on = SV.sound; persist(); renderWin(); };
     $('hQuit').onclick = () => { persist(); location.reload(); };

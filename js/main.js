@@ -367,14 +367,16 @@ function walkTo(x, z) { me.moveTo = { x, z }; me.path = field(G.L, toT(x), toT(z
 const stick = { id: null, ox: 0, oy: 0, mx: 0, mz: 0 };
 function touchDown(e) {
   if (e.clientX < innerWidth * 0.45 && stick.id === null) { stick.id = e.pointerId; stick.ox = e.clientX; stick.oy = e.clientY; const s = $('stick'); s.style.left = (e.clientX - 60) + 'px'; s.style.top = (e.clientY - 60) + 'px'; s.classList.add('on'); return; }
-  const m = mobAtScreen(e.clientX, e.clientY); if (m) { me.target = m; return; }
+  const m = mobAtScreen(e.clientX, e.clientY); if (m) { me.target = m; touchHold = e.pointerId; return; }
   const [gx, gz] = groundAt(e.clientX, e.clientY); walkTo(gx, gz);
 }
 addEventListener('pointermove', (e) => { if (e.pointerId !== stick.id) return; let dx = e.clientX - stick.ox, dy = e.clientY - stick.oy; const d = Math.hypot(dx, dy); if (d > 55) { dx *= 55 / d; dy *= 55 / d; } stick.mx = dx / 55; stick.mz = dy / 55; $('knob').style.transform = `translate(${dx}px, ${dy}px)`; });
-function touchUp(e) { if (e.pointerId === stick.id) { stick.id = null; stick.mx = stick.mz = 0; $('stick').classList.remove('on'); $('knob').style.transform = ''; } }
+function touchUp(e) { if (e.pointerId === touchHold) touchHold = null; if (e.pointerId === stick.id) { stick.id = null; stick.mx = stick.mz = 0; $('stick').classList.remove('on'); $('knob').style.transform = ''; } }
 const nearestMob = (r = 14) => { let b = null, bd = r; for (const m of G.mobs) { if (!m.alive) continue; const d = Math.hypot(m.x - me.x, m.z - me.z); if (d < bd && sees(G.L, me.x, me.z, m.x, m.z)) { bd = d; b = m; } } return b; };
-function touchSkill(k) { const id = k === 'atk' ? null : ch().keys[k]; const m = nearestMob(); if (!id) { if (m) me.target = m; return; } ch().rmb = id; const [x, z] = m ? [m.x, m.z] : [me.x + Math.sin(me.yaw) * 6, me.z + Math.cos(me.yaw) * 6]; cast(id, x, z, m); }
-for (const k of ['atk', 'Q', 'E', 'R', 'F']) $('t' + k).addEventListener('pointerdown', (e) => { e.preventDefault(); sfx.unlock(); touchSkill(k); });
+let touchHold = null;
+const holdingAttack = () => (!isTouch && mouse.down) || pad.attacking || touchHold !== null;
+function touchSkill(k, e) { const id = k === 'atk' ? null : ch().keys[k]; const m = nearestMob(); if (!id) { if (m) { me.target = m; touchHold = e ? e.pointerId : null; } return; } ch().rmb = id; const [x, z] = m ? [m.x, m.z] : [me.x + Math.sin(me.yaw) * 6, me.z + Math.cos(me.yaw) * 6]; cast(id, x, z, m); }
+for (const k of ['atk', 'Q', 'E', 'R', 'F']) $('t' + k).addEventListener('pointerdown', (e) => { e.preventDefault(); sfx.unlock(); touchSkill(k, e); });
 $('tH').addEventListener('pointerdown', (e) => { e.preventDefault(); drink('hp'); }); $('tM').addEventListener('pointerdown', (e) => { e.preventDefault(); drink('mp'); });
 $('tTP').addEventListener('pointerdown', (e) => { e.preventDefault(); townPortal(); });
 
@@ -585,6 +587,8 @@ function updateHero(dt) {
     me.speed = 1; return;
   }
   // holding the mouse keeps you walking / attacking toward the cursor
+  // holding the button: the monster under the cursor becomes the target, so you can sweep from one to the next
+  if (!isTouch && mouse.down && !winOpen() && me.target) { const hov = mobAtScreen(mouse.x, mouse.y); if (hov && hov !== me.target) me.target = hov; }
   if (!isTouch && mouse.down && !winOpen() && !me.target && !me.pickup) { const [gx, gz] = groundAt(mouse.x, mouse.y); if (Math.hypot(gx - me.x, gz - me.z) > 0.6) { me.moveTo = { x: gx, z: gz }; me.path = null; } }
   if (!isTouch && mouse.rdown && ch().rmb && me.atkT <= 0) castAtCursor(ch().rmb);
   // WASD or the stick: move relative to the camera
@@ -603,7 +607,7 @@ function updateHero(dt) {
     if (!m.alive) { me.target = null; }
     else {
       const d = Math.hypot(m.x - me.x, m.z - me.z), range = ST.bow || (ch().cls === 'sorc' && ST.weapon && BASES[ST.weapon.base].type === 'wand') ? 14 : reach(m);
-      if (d <= range && (range < 3 || sees(L, me.x, me.z, m.x, m.z))) { if (me.atkT <= 0) { if (me.queued) { const q = me.queued; me.queued = null; cast(q, m.x, m.z, m); } else basicAttack(m); } return; }
+      if (d <= range && (range < 3 || sees(L, me.x, me.z, m.x, m.z))) { if (me.atkT <= 0) { if (me.queued) { const q = me.queued; me.queued = null; cast(q, m.x, m.z, m); } else { basicAttack(m); if (!holdingAttack()) me.target = null; } } return; }
       me.moveTo = { x: m.x, z: m.z }; me.path = null;
     }
   }
@@ -1034,4 +1038,4 @@ document.body.classList.toggle('touch', isTouch);
 renderSelect(); requestAnimationFrame(frame);
 (async () => { try { cloud = await import('/save.js'); if (await cloud.pull(GAME, SAVE_KEY)) { SV = JSON.parse(localStorage.getItem(SAVE_KEY)) || SV; renderSelect(); } } catch (e) { cloud = null; } })();
 if (params.has('quick')) { if (!SV.chars.length) SV.chars.push(newChar('Test', params.get('quick') || 'warrior')); startChar(0); }
-window.DH = { G, me, ch, refresh: () => { refreshStats(); buildHero(); }, get ST() { return ST; }, enterLevel, enterTown, cast, openWin, closeWin, gainXp, dropItem, pickUp, SV: () => SV };
+window.DH = { G, me, ch, camera, refresh: () => { refreshStats(); buildHero(); }, get ST() { return ST; }, enterLevel, enterTown, cast, openWin, closeWin, gainXp, dropItem, pickUp, SV: () => SV };

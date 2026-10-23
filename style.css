@@ -145,3 +145,26 @@ hr { border: 0; border-top: 1px solid rgba(232, 192, 112, .25); margin: 6px 0; }
 .acts button { width: 28px; height: 28px; font-size: 12px; }
 #touchBtns { grid-template-columns: repeat(4, 54px); }
 #touchBtns button { width: 54px; height: 54px; }
+
+/* paper doll, set items, codex */
+:root { --set: #3ade5a; }
+.r-set { border-color: var(--set); box-shadow: inset 0 0 10px rgba(58, 222, 90, .45); }
+.doll { display: grid; grid-template-columns: 58px 1fr 58px; grid-template-rows: repeat(5, 64px); gap: 6px; padding: 6px; border-radius: 12px;
+  grid-template-areas: "amulet head ring1" "weapon fig offhand" "weapon fig offhand" "body fig ring2" "gloves belt boots";
+  background: radial-gradient(ellipse at 50% 48%, rgba(216, 168, 74, .16), rgba(0, 0, 0, .25) 70%); border: 1px solid var(--stone2); }
+.doll .slot { aspect-ratio: auto; position: relative; }
+.doll .slot[style]::after { content: ''; position: absolute; inset: 3px; border-radius: 7px; box-shadow: inset 0 0 0 2px var(--ic); opacity: .55; pointer-events: none; }
+.s-head { grid-area: head; justify-self: center; width: 58px; } .s-amulet { grid-area: amulet; } .s-ring1 { grid-area: ring1; } .s-ring2 { grid-area: ring2; }
+.s-weapon { grid-area: weapon; } .s-offhand { grid-area: offhand; } .s-body { grid-area: body; } .s-gloves { grid-area: gloves; }
+.s-belt { grid-area: belt; justify-self: center; width: 58px; } .s-boots { grid-area: boots; }
+.fig { grid-area: fig; position: relative; min-height: 0; min-width: 0; }
+.dollcv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+.setc { color: var(--set); font-weight: 800; } .seton { color: var(--set); } .setoff { color: #7a7a7a; }
+.setrow span { color: var(--set); }
+.tabs.small button { padding: 3px 8px; font-size: 12px; }
+.codex { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; max-height: 58vh; overflow: auto; }
+.cx { display: flex; gap: 8px; padding: 6px 8px; border-radius: 10px; background: rgba(0, 0, 0, .28); border: 1px solid var(--stone2); opacity: .72; }
+.cx.got { opacity: 1; border-color: var(--gold2); }
+.cx .ic { flex: none; width: 34px; height: 34px; display: grid; place-items: center; font-size: 20px; border-radius: 8px; box-shadow: inset 0 0 0 2px var(--ic); }
+.cx div { min-width: 0; } .cx p { margin: 2px 0 0; font-size: 11px; line-height: 1.35; color: #cfc4b0; } .cx small { color: var(--muted); }
+.cx.set { grid-column: 1 / -1; }

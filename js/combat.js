@@ -1,6 +1,12 @@
 // A character's numbers from their class, stat points, level, skills (passives and active buffs) and gear; hit chances and damage.
-import { CLASSES, SKILLS, BASES, DIFFS } from './data.js?v=3';
+import { CLASSES, SKILLS, BASES, DIFFS, SET_BY_ID } from './data.js?v=4';
 
+// how many different pieces of each set are worn (items too high to use don't count)
+export function setCount(equip) {
+  const seen = {};
+  for (const it of Object.values(equip || {})) if (it && it.set && !it.lvlTooLow) (seen[it.set] = seen[it.set] || new Set()).add(it.sp);
+  return Object.fromEntries(Object.entries(seen).map(([k, v]) => [k, v.size]));
+}
 export const EQUIP_SLOTS = ['head', 'amulet', 'weapon', 'body', 'offhand', 'gloves', 'belt', 'ring1', 'ring2', 'boots'];
 // ch: { cls, lvl, alloc: {str,dex,vit,ene}, skills: {id: lv}, equip: {slot: item}, diff, buffs: [skill ids active] }
 export function derive(ch) {
@@ -16,11 +22,13 @@ export function derive(ch) {
     if (slot === 'weapon') weapon = it;
     skillsBonus += BASES[it.base].sk && (ch.cls === 'sorc' || ch.cls === 'necro' || ch.cls === 'druid') ? BASES[it.base].sk : 0;
   }
+  // set bonuses: each set counts its different pieces worn
+  for (const [id, n] of Object.entries(setCount(ch.equip))) { const S = SET_BY_ID[id]; if (!S) continue; for (const [k, st] of Object.entries(S.bonus)) if (n >= +k) for (const [s2, v] of Object.entries(st)) add[s2] = (add[s2] || 0) + v; }
   for (const k of ['str', 'dex', 'vit', 'ene']) s[k] += add[k] || 0;
   skillsBonus += add.skills || 0;
   const sl = (id) => { const b = ch.skills[id] || 0; return b ? b + skillsBonus : 0; };
   // generated passives always count; buffs while they last (shapeshift forms are buffs too)
-  const P = { dmgPct: 0, elPct: { fire: 0, cold: 0, light: 0, poison: 0, phys: 0, magic: 0 }, crit: 0, life: 0, mana: 0, def: 0, ias: 0, ls: 0, res: 0, fr: 0, regen: 0, manaRegen: 0, thorns: 0, chill: 0, absorb: 0, minion: 0 };
+  const P = { dmgPct: add.dmgp || 0, elPct: { fire: 0, cold: 0, light: 0, poison: 0, phys: 0, magic: 0 }, crit: 0, life: 0, mana: 0, def: 0, ias: 0, ls: 0, res: 0, fr: 0, regen: 0, manaRegen: 0, thorns: add.thorns || 0, chill: 0, absorb: 0, minion: add.minion || 0 };
   const apply = (S, lv) => { for (const key of S.stats || []) { const v = S.val(key, lv); if (key === 'elPct') P.elPct[S.el] += v; else P[key] += v; } };
   for (const [id, b] of Object.entries(ch.skills)) { const S = SKILLS[id]; if (S && S.gen && S.mech === 'passive' && b) apply(S, b + skillsBonus); }
   for (const id of ch.buffs || []) { const S = SKILLS[id]; if (S && S.gen && ch.skills[id]) apply(S, ch.skills[id] + skillsBonus); }

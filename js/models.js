@@ -1,7 +1,7 @@
 // Models in the Breezy Isle look (four-step cel shading, dark brown outlines): heroes that wear what they equip,
 // every monster and boss, and the dungeon's props.
 import * as THREE from 'three';
-import { MOBS, BASES, CLASSES } from './data.js?v=3';
+import { MOBS, BASES, CLASSES, itemColor, SET_BY_ID } from './data.js?v=4';
 
 export const GRAD = (() => { const d = new Uint8Array([70, 150, 210, 255]); const t = new THREE.DataTexture(d, 4, 1, THREE.RedFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
 const mats = new Map();
@@ -47,45 +47,73 @@ function biped({ skin, shirt, pants, head = null, scale = 1, hunch = 0, eyes = '
   root.userData = { body, head: hd, legL, legR, armL, armR, handR, handL, phase: Math.random() * 6 };
   return root;
 }
-// what a hero holds and wears
-function weaponMesh(type, tier) {
-  const g = new THREE.Group(), metal = mat(tier >= 3 ? '#e8d07a' : tier >= 2 ? '#c8d0e0' : '#a8a8b0'), wood = mat('#7a4a2a');
-  if (type === 'sword') { put(g, box(0.06, 0.06, 0.22), wood); put(g, box(0.22, 0.05, 0.05), mat('#d8b040'), 0, 0, 0.12); put(g, box(0.05, 0.08, 0.8 + tier * 0.1), metal, 0, 0, 0.6); }
-  else if (type === 'axe') { put(g, cyl(0.03, 0.03, 0.9, 6), wood, 0, 0, 0.35).rotation.x = Math.PI / 2; put(g, box(0.05, 0.32 + tier * 0.05, 0.26), metal, 0, 0.12, 0.7); }
-  else if (type === 'mace') { put(g, cyl(0.03, 0.03, 0.8, 6), wood, 0, 0, 0.3).rotation.x = Math.PI / 2; put(g, sph(0.13 + tier * 0.02, 8, 6), metal, 0, 0, 0.72); }
-  else if (type === 'bow') { const b = put(g, geo('bow' + tier, () => new THREE.TorusGeometry(0.5, 0.03, 5, 14, Math.PI)), mat(tier >= 3 ? '#3a2a1a' : '#8a5a2a'), 0, 0, 0.1); b.rotation.set(0, Math.PI / 2, Math.PI / 2); put(g, cyl(0.006, 0.006, 1, 3), mat('#f4f4f4'), 0, 0, 0.1).rotation.x = Math.PI / 2; }
-  else if (type === 'staff') { put(g, cyl(0.035, 0.04, 1.7, 6), wood, 0, 0.35, 0.1); put(g, sph(0.11, 10, 8), glow(tier >= 3 ? '#ff7a3a' : '#7ab8ff', 1.4), 0, 1.25, 0.1); }
-  else if (type === 'wand') { put(g, cyl(0.02, 0.03, 0.45, 6), mat('#e8e0c8'), 0, 0, 0.2).rotation.x = Math.PI / 2; put(g, sph(0.06, 8, 6), glow('#c87aff', 1.4), 0, 0, 0.45); }
+// what a hero holds and wears (the paper doll): every slot shows, in the item's own colour when it is a unique or a set piece
+function weaponMesh(type, tier, col = null) {
+  const g = new THREE.Group(), metal = mat(col || (tier >= 3 ? '#e8d07a' : tier >= 2 ? '#c8d0e0' : '#a8a8b0')), wood = mat('#7a4a2a'), gem = col ? glow(col, 1.3) : null;
+  if (type === 'sword') { put(g, box(0.06, 0.06, 0.22), wood); put(g, box(0.22, 0.05, 0.05), mat('#d8b040'), 0, 0, 0.12); put(g, box(0.05, 0.08, 0.8 + tier * 0.1), metal, 0, 0, 0.6); if (gem) put(g, sph(0.05, 6, 5), gem, 0, 0.05, 0.12); }
+  else if (type === 'axe') { put(g, cyl(0.03, 0.03, 0.9, 6), wood, 0, 0, 0.35).rotation.x = Math.PI / 2; put(g, box(0.05, 0.32 + tier * 0.05, 0.26), metal, 0, 0.12, 0.7); if (gem) put(g, sph(0.05, 6, 5), gem, 0, 0.12, 0.7); }
+  else if (type === 'mace') { put(g, cyl(0.03, 0.03, 0.8, 6), wood, 0, 0, 0.3).rotation.x = Math.PI / 2; put(g, sph(0.13 + tier * 0.02, 8, 6), metal, 0, 0, 0.72); if (gem) for (let i = 0; i < 4; i++) put(g, cone(0.04, 0.12, 4), gem, Math.cos(i * 1.57) * 0.15, Math.sin(i * 1.57) * 0.15, 0.72).rotation.set(Math.PI / 2, 0, i * 1.57); }
+  else if (type === 'bow') { const b = put(g, geo('bow' + tier, () => new THREE.TorusGeometry(0.5, 0.03, 5, 14, Math.PI)), mat(col || (tier >= 3 ? '#3a2a1a' : '#8a5a2a')), 0, 0, 0.1); b.rotation.set(0, Math.PI / 2, Math.PI / 2); put(g, cyl(0.006, 0.006, 1, 3), mat('#f4f4f4'), 0, 0, 0.1).rotation.x = Math.PI / 2; }
+  else if (type === 'staff') { put(g, cyl(0.035, 0.04, 1.7, 6), wood, 0, 0.35, 0.1); put(g, sph(0.11, 10, 8), glow(col || (tier >= 3 ? '#ff7a3a' : '#7ab8ff'), 1.4), 0, 1.25, 0.1); }
+  else if (type === 'wand') { put(g, cyl(0.02, 0.03, 0.45, 6), mat('#e8e0c8'), 0, 0, 0.2).rotation.x = Math.PI / 2; put(g, sph(0.06, 8, 6), glow(col || '#c87aff', 1.4), 0, 0, 0.45); }
   g.rotation.x = -0.35;
   return g;
 }
 export function makeHero(cls, equip = {}) {
   const C = CLASSES[cls], col = C.color;
+  const B = (s) => equip[s] && BASES[equip[s].base], tint = (s) => itemColor(equip[s]);
+  const h = B('head'), hc = tint('head');
   const head = (hd) => {
-    const h = equip.head && BASES[equip.head.base];
-    if (h && h.tier >= 3) { put(hd, cyl(0.42, 0.45, 0.22, 10), mat('#e8c84a'), 0, 0.42, 0); for (let i = 0; i < 5; i++) put(hd, cone(0.07, 0.2, 5), mat('#e8c84a'), Math.cos(i * 1.256) * 0.38, 0.62, Math.sin(i * 1.256) * 0.38); }
-    else if (h && h.tier >= 2) { const m = put(hd, sph(0.48, 14, 8), mat('#b8c0d0'), 0, 0.12, -0.02); m.scale.set(1, 0.75, 1); put(hd, box(0.08, 0.3, 0.1), mat('#b8c0d0'), 0, 0.05, 0.45); }
-    else if (h) { const m = put(hd, sph(0.47, 14, 8), mat('#8a5a3a'), 0, 0.15, -0.02); m.scale.set(1, 0.6, 1); }
+    if (h) {
+      const c = hc || (h.tier >= 3 ? '#e8c84a' : h.tier >= 2 ? '#b8c0d0' : '#8a5a3a');
+      if (h.id === 'crown') { put(hd, cyl(0.42, 0.45, 0.22, 10), mat(c), 0, 0.42, 0); for (let i = 0; i < 5; i++) put(hd, cone(0.07, 0.2, 5), mat(c), Math.cos(i * 1.256) * 0.38, 0.62, Math.sin(i * 1.256) * 0.38); }
+      else if (h.id === 'circlet') { put(hd, geo('circ', () => new THREE.TorusGeometry(0.44, 0.035, 6, 20)), mat(c), 0, 0.22, 0).rotation.x = Math.PI / 2 - 0.15; put(hd, sph(0.07, 8, 6), glow(hc || '#8ab8ff', 1.5), 0, 0.26, 0.44); }
+      else if (h.tier >= 2) { const m = put(hd, sph(0.48, 14, 8), mat(c), 0, 0.12, -0.02); m.scale.set(1, 0.75, 1); put(hd, box(0.08, 0.3, 0.1), mat(c), 0, 0.05, 0.45); if (hc) for (const s of [-1, 1]) put(hd, cone(0.06, 0.3, 5), mat('#e8e0c8'), s * 0.4, 0.4, 0).rotation.z = -s * 0.6; }
+      else { const m = put(hd, sph(0.47, 14, 8), mat(c), 0, 0.15, -0.02); m.scale.set(1, 0.6, 1); }
+      if (hc && h.id !== 'circlet') put(hd, sph(0.06, 8, 6), glow(hc, 1.5), 0, 0.3, 0.42);
+    }
     else if (cls === 'druid') { put(hd, sph(0.5, 14, 10), mat('#4a7a2a'), 0, 0.1, -0.04).scale.set(1, 0.9, 1); for (let i = 0; i < 6; i++) { const lf = put(hd, sph(0.14, 6, 5), mat(i % 2 ? '#6aaa3a' : '#3a8a2a'), Math.cos(i) * 0.42, 0.42 + (i % 3) * 0.06, Math.sin(i) * 0.42); lf.scale.set(1, 0.4, 1.6); } }
     else if (cls === 'necro') { const hood = put(hd, sph(0.52, 14, 10), mat('#2a2238'), 0, 0.06, -0.06); hood.scale.set(1, 1.05, 1.05); put(hd, cone(0.3, 0.5, 8), mat('#2a2238'), 0, 0.55, -0.15).rotation.x = -0.4; }
     else if (cls === 'sorc') { put(hd, sph(0.47, 14, 10), mat('#f2d26a'), 0, 0.1, -0.06).scale.set(1, 0.85, 1); put(hd, box(0.9, 0.9, 0.2), mat('#f2d26a'), 0, -0.2, -0.32); }
     else if (cls === 'ranger') { put(hd, cone(0.55, 0.7, 10), mat('#3a7a3a'), 0, 0.42, -0.05); }
     else put(hd, sph(0.47, 14, 10), mat('#5a3a1a'), 0, 0.12, -0.04).scale.set(1, 0.7, 1);
   };
-  const bodyT = equip.body ? BASES[equip.body.base].tier : 0;
-  const g = biped({ skin: cls === 'necro' ? '#e0dcd0' : '#f2c9a0', shirt: bodyT >= 3 ? '#c8ccd8' : bodyT === 2 ? '#8a8a9a' : col, pants: cls === 'sorc' ? '#3a2a6a' : cls === 'necro' ? '#1a1424' : cls === 'druid' ? '#5a4a2a' : '#4a3a2a', head });
+  // body armour colours the shirt (and for plate, the legs)
+  const bd = B('body'), bodyT = bd ? bd.tier : 0, bc = tint('body');
+  const shirt = bc || (bodyT >= 3 ? '#c8ccd8' : bodyT === 2 ? '#8a8a9a' : col);
+  const pants = bodyT >= 3 && bc ? '#4a4a5a' : cls === 'sorc' ? '#3a2a6a' : cls === 'necro' ? '#1a1424' : cls === 'druid' ? '#5a4a2a' : '#4a3a2a';
+  const g = biped({ skin: cls === 'necro' ? '#e0dcd0' : '#f2c9a0', shirt, pants, head });
   const u = g.userData;
   if ((cls === 'sorc' || cls === 'necro') && !equip.body) put(u.body, cone(0.45, 0.8, 10), mat(col), 0, 0.55, 0);
-  if (bodyT >= 2) for (const s of [-1, 1]) put(u.body, sph(0.16, 8, 6), mat(bodyT >= 3 ? '#e8d07a' : '#a8a8b8'), s * 0.38, 1.25, 0);
-  const w = equip.weapon && BASES[equip.weapon.base];
-  if (w) u.handR.add(weaponMesh(w.type, w.tier));
-  const o = equip.offhand && BASES[equip.offhand.base];
-  if (o && o.block) { const sh = put(u.handL, cyl(0.32 + o.tier * 0.04, 0.32 + o.tier * 0.04, 0.06, 12), mat(o.tier >= 3 ? '#8a8a9a' : '#8a5a3a'), -0.08, 0, 0.12); sh.rotation.z = Math.PI / 2; put(u.handL, sph(0.08, 8, 6), mat('#e8c84a'), -0.13, 0, 0.12); }
-  else if (o) put(u.handL, sph(0.16, 12, 10), glow('#8ab8ff', 1.2), 0, 0, 0.1);
+  if (bodyT >= 2) for (const s of [-1, 1]) put(u.body, sph(0.16, 8, 6), mat(bc ? shade(bc, 1.25) : bodyT >= 3 ? '#e8d07a' : '#a8a8b8'), s * 0.38, 1.25, 0);
+  if (bodyT >= 3) { const p = put(u.body, box(0.46, 0.4, 0.12), mat(bc ? shade(bc, 0.8) : '#a8acb8'), 0, 1.0, 0.26); p.rotation.x = -0.1; }
+  if (bc) put(u.body, sph(0.055, 8, 6), glow(bc, 1.4), 0, 1.02, 0.33);
+  // gloves: bigger hands; gauntlets get a cuff
+  const gl = B('gloves'), gc = tint('gloves') || (gl && gl.tier >= 2 ? '#a8a8b8' : '#7a4a2a');
+  if (gl) for (const arm of [u.armL, u.armR]) { put(arm, sph(0.13, 8, 6), mat(gc), 0, -0.5, 0); if (gl.tier >= 2) put(arm, cyl(0.12, 0.11, 0.12, 8), mat(shade(gc, 0.85)), 0, -0.4, 0); }
+  // boots (or bare feet)
+  const bt = B('boots'), btc = tint('boots') || (bt ? (bt.tier >= 2 ? '#9a9aaa' : '#6a4228') : '#3a2a1a');
+  for (const leg of [u.legL, u.legR]) { put(leg, box(0.2, 0.14, 0.32), mat(btc), 0, -0.46, 0.05); if (bt && bt.tier >= 2) put(leg, cyl(0.14, 0.14, 0.16, 8), mat(shade(btc, 0.85)), 0, -0.34, 0); }
+  // belt and its buckle
+  const bl = B('belt');
+  if (bl) { const c = tint('belt') || (bl.tier >= 2 ? '#5a4a3a' : '#7a5a3a'); put(u.body, geo('belt', () => new THREE.TorusGeometry(0.305, 0.055, 6, 18)), mat(c), 0, 0.68, 0).rotation.x = Math.PI / 2; put(u.body, box(0.12, 0.1, 0.05), mat(tint('belt') ? shade(c, 1.4) : '#d8b040'), 0, 0.68, 0.32); }
+  // amulet on the chest, rings as a glint on the hands
+  if (equip.amulet) { put(u.body, geo('chainA', () => new THREE.TorusGeometry(0.2, 0.012, 4, 16)), mat('#d8b040'), 0, 1.28, 0.05).rotation.x = Math.PI / 2 - 0.5; put(u.body, sph(0.065, 8, 6), glow(tint('amulet') || '#7ab8ff', 1.6), 0, 1.14, 0.29); }
+  for (const [s, arm] of [['ring1', u.armR], ['ring2', u.armL]]) if (equip[s]) put(arm, sph(0.035, 6, 5), glow(tint(s) || '#e8c84a', 1.8), 0.07, -0.5, 0.07);
+  const w = B('weapon');
+  if (w) u.handR.add(weaponMesh(w.type, w.tier, tint('weapon')));
+  const o = B('offhand'), oc = tint('offhand');
+  if (o && o.block) { const r0 = 0.32 + o.tier * 0.04, sh = put(u.handL, cyl(r0, r0, 0.06, 12), mat(oc || (o.tier >= 3 ? '#8a8a9a' : '#8a5a3a')), -0.08, 0, 0.12); sh.rotation.z = Math.PI / 2; put(u.handL, sph(0.08, 8, 6), oc ? glow(oc, 1.3) : mat('#e8c84a'), -0.13, 0, 0.12); if (oc) { const rim = put(u.handL, geo('rim' + o.tier, () => new THREE.TorusGeometry(r0, 0.03, 4, 18)), mat(shade(oc, 1.4)), -0.12, 0, 0.12); rim.rotation.y = Math.PI / 2; } }
+  else if (o) put(u.handL, sph(0.16, 12, 10), glow(oc || '#8ab8ff', 1.2), 0, 0, 0.1);
   if (cls === 'ranger') put(u.body, cyl(0.1, 0.1, 0.7, 8), mat('#6a4a2a'), 0.15, 1.1, -0.32).rotation.z = 0.4;   // quiver
+  // three or more pieces of one set: a cape in the set's colour
+  const sets = {}; for (const it of Object.values(equip)) if (it && it.set) (sets[it.set] = sets[it.set] || new Set()).add(it.sp);
+  const full = Object.entries(sets).find(([, v]) => v.size >= 3);
+  if (full) { const c = SET_BY_ID[full[0]].col, cape = put(u.body, box(0.72, 1.05, 0.05), mat(c), 0, 0.82, -0.33); cape.rotation.x = 0.12; put(u.body, box(0.78, 0.1, 0.1), mat(shade(c, 0.7)), 0, 1.33, -0.3); }
   u.bow = w && w.type === 'bow';
   return outline(g);
 }
+const shade = (hex, k) => { const c = new THREE.Color(hex); c.multiplyScalar(k); return '#' + c.getHexString(); };
 
 // ------------------------------------------------------------------ monsters
 export function makeMob(id0) {

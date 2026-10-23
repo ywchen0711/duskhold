@@ -1,5 +1,5 @@
 // Items: rolling drops (base, rarity, affixes), naming them, and what they are worth.
-import { BASES, AFFIXES, UNIQUES, RARE_A, RARE_B, POTIONS } from './data.js?v=3';
+import { BASES, AFFIXES, UNIQUES, SETS, RARE_A, RARE_B, POTIONS } from './data.js?v=4';
 
 export function rng(seed) { let s = seed >>> 0 || 1; return () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const pick = (list, r) => list[Math.floor(r() * list.length)];
@@ -13,13 +13,23 @@ export function basesFor(il) {
   const ok = Object.values(BASES).filter((b) => b.lvl <= il + 2);
   return ok.flatMap((b) => Array(b.lvl > il - 14 ? 3 : 1).fill(b));
 }
-export function makeItem(baseId, rar, il, r = Math.random) {
+// set pieces by base
+const PIECES = {}; for (const S of SETS) S.pieces.forEach((p, i) => (PIECES[p.base] = PIECES[p.base] || []).push({ S, p, i }));
+// pickId: make this exact unique (its id) or set piece ('setId:index')
+export function makeItem(baseId, rar, il, r = Math.random, pickId = null) {
   const B = BASES[baseId];
   const it = { uid: newUid(), base: baseId, rar, il, st: {}, req: B.lvl };
   if (rar === 'unique') {
-    const U = UNIQUES.find((u) => u.base === baseId && (u.lvl || 1) <= il + 4);
-    if (!U) return makeItem(baseId, 'rare', il, r);
+    // the uniques this level can find on this base; the ones near the level turn up most
+    const ok = pickId ? UNIQUES.filter((u) => u.id === pickId) : UNIQUES.filter((u) => u.base === baseId && (u.lvl || 1) <= il + 4);
+    const near = ok.filter((u) => u.lvl >= il - 18), U = (near.length && r() < 0.75 ? near : ok)[Math.floor(r() * (near.length && r() < 0.75 ? near : ok).length)];
+    if (!U) return makeItem(baseId, PIECES[baseId] ? 'set' : 'rare', il, r);
     it.u = U.id; it.name = U.n; for (const [k, v] of Object.entries(U.st)) it.st[k] = roll(v, r); it.req = Math.max(B.lvl, U.lvl || B.lvl);
+  } else if (rar === 'set') {
+    const all = PIECES[baseId] || [], ok = pickId ? all.filter((x) => x.S.id + ':' + x.i === pickId) : all.filter((x) => x.S.lvl <= il + 4);
+    const X = ok[Math.floor(r() * ok.length)];
+    if (!X) return makeItem(baseId, 'rare', il, r);
+    it.set = X.S.id; it.sp = X.i; it.name = X.p.n; for (const [k, v] of Object.entries(X.p.st)) it.st[k] = roll(v, r); it.req = Math.max(B.lvl, X.S.lvl);
   } else if (rar === 'magic' || rar === 'rare') {
     const n = rar === 'magic' ? 1 + (r() < 0.5 ? 1 : 0) : 3 + Math.floor(r() * 3);
     const slot = B.slot === 'ring' || B.slot === 'amulet' ? B.slot : B.slot;
@@ -49,10 +59,10 @@ export function rollItem(il, mf = 0, r = Math.random, { boss = false, champ = fa
   const B = pick(basesFor(il), r);
   const mfU = mf * 250 / (mf + 250), mfR = mf * 600 / (mf + 600), mfM = mf;
   const k = boss ? 4 : champ ? 2 : 1;
-  const u = r(), cu = 0.008 * k * (1 + mfU / 100), cr = cu + 0.055 * k * (1 + mfR / 100), cm = cr + 0.3 * (1 + mfM / 100);
-  let rar = u < cu ? 'unique' : u < cr ? 'rare' : u < cm ? 'magic' : 'normal';
+  const u = r(), cu = 0.008 * k * (1 + mfU / 100), cs = cu + 0.01 * k * (1 + mfU / 100), cr = cs + 0.055 * k * (1 + mfR / 100), cm = cr + 0.3 * (1 + mfM / 100);
+  let rar = u < cu ? 'unique' : u < cs ? 'set' : u < cr ? 'rare' : u < cm ? 'magic' : 'normal';
   if (B.jewel && rar === 'normal') rar = 'magic';
-  const order = ['normal', 'magic', 'rare', 'unique'];
+  const order = ['normal', 'magic', 'rare', 'set', 'unique'];
   if (minRar && order.indexOf(rar) < order.indexOf(minRar)) rar = minRar;
   return makeItem(B.id, rar, il, r);
 }
@@ -63,7 +73,7 @@ export function potionFor(lvl, r = Math.random) {
 }
 // what the vendor pays (and charges ×4)
 export function itemValue(it) {
-  const B = BASES[it.base], m = { normal: 1, magic: 3, rare: 7, unique: 15 }[it.rar];
+  const B = BASES[it.base], m = { normal: 1, magic: 3, rare: 7, set: 12, unique: 15 }[it.rar];
   const affix = Object.values(it.st).reduce((a, v) => a + Math.abs(v), 0);
   return Math.max(5, Math.round((B.tier * 25 + it.il * 4 + affix * 1.5) * m));
 }

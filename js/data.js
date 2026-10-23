@@ -1,5 +1,6 @@
 // Duskhold: classes and skills, monsters, item bases, affixes and uniques. Names are [中文, English].
-import { buildSkills } from './skillgen.js?v=3';
+import { buildSkills } from './skillgen.js?v=4';
+import { buildItems } from './itemgen.js?v=4';
 
 // ------------------------------------------------------------------ classes
 export const CLASSES = {
@@ -98,6 +99,7 @@ const base = (id, zh, en, o) => { B[id] = { id, n: [zh, en], ...o }; };
 // weapons
 base('short_sword', '短劍', 'Short Sword', { slot: 'weapon', type: 'sword', tier: 1, lvl: 1, dmg: [2, 7], speed: 1.6, icon: '🗡️' });
 base('broad_sword', '闊劍', 'Broad Sword', { slot: 'weapon', type: 'sword', tier: 2, lvl: 14, dmg: [8, 20], speed: 1.55, icon: '🗡️' });
+base('claymore', '雙手巨劍', 'Claymore', { slot: 'weapon', type: 'sword', tier: 2, lvl: 20, dmg: [14, 34], speed: 1.25, two: true, icon: '⚔️' });
 base('rune_sword', '符文劍', 'Rune Sword', { slot: 'weapon', type: 'sword', tier: 3, lvl: 32, dmg: [18, 44], speed: 1.55, icon: '⚔️' });
 base('hand_axe', '手斧', 'Hand Axe', { slot: 'weapon', type: 'axe', tier: 1, lvl: 2, dmg: [3, 8], speed: 1.45, icon: '🪓' });
 base('war_axe', '戰斧', 'War Axe', { slot: 'weapon', type: 'axe', tier: 2, lvl: 18, dmg: [10, 26], speed: 1.4, icon: '🪓' });
@@ -110,21 +112,27 @@ base('long_bow', '長弓', 'Long Bow', { slot: 'weapon', type: 'bow', tier: 2, l
 base('war_bow', '戰爭之弓', 'War Bow', { slot: 'weapon', type: 'bow', tier: 3, lvl: 33, dmg: [16, 48], speed: 1.55, two: true, icon: '🏹' });
 base('wand', '魔杖', 'Wand', { slot: 'weapon', type: 'wand', tier: 1, lvl: 1, dmg: [1, 5], speed: 1.5, icon: '🪄', sk: 1 });
 base('bone_wand', '骨杖', 'Bone Wand', { slot: 'weapon', type: 'wand', tier: 2, lvl: 15, dmg: [4, 12], speed: 1.5, icon: '🪄', sk: 1 });
+base('grim_wand', '冥府魔杖', 'Grim Wand', { slot: 'weapon', type: 'wand', tier: 3, lvl: 32, dmg: [8, 20], speed: 1.5, icon: '🪄', sk: 2 });
+base('battle_staff', '戰鬥法杖', 'Battle Staff', { slot: 'weapon', type: 'staff', tier: 2, lvl: 16, dmg: [8, 22], speed: 1.3, two: true, icon: '🦯', sk: 1 });
 base('staff', '法杖', 'Quarterstaff', { slot: 'weapon', type: 'staff', tier: 1, lvl: 4, dmg: [4, 12], speed: 1.3, two: true, icon: '🦯', sk: 1 });
 base('elder_staff', '長者法杖', 'Elder Staff', { slot: 'weapon', type: 'staff', tier: 3, lvl: 30, dmg: [14, 36], speed: 1.3, two: true, icon: '🦯', sk: 2 });
 // armour
 base('cap', '皮帽', 'Cap', { slot: 'head', tier: 1, lvl: 1, def: [3, 5], icon: '🧢' });
 base('helm', '頭盔', 'Helm', { slot: 'head', tier: 2, lvl: 14, def: [15, 20], icon: '⛑️' });
+base('circlet', '頭環', 'Circlet', { slot: 'head', tier: 2, lvl: 18, def: [8, 12], icon: '💠', sk: 1 });
 base('crown', '王冠', 'Crown', { slot: 'head', tier: 3, lvl: 32, def: [35, 50], icon: '👑' });
 base('quilted', '襯墊甲', 'Quilted Armour', { slot: 'body', tier: 1, lvl: 1, def: [8, 11], icon: '🦺' });
 base('chain', '鎖子甲', 'Chain Mail', { slot: 'body', tier: 2, lvl: 15, def: [40, 55], icon: '🥋' });
 base('plate', '全身鎧', 'Full Plate', { slot: 'body', tier: 3, lvl: 34, def: [90, 120], icon: '🛡️' });
 base('gloves', '皮手套', 'Leather Gloves', { slot: 'gloves', tier: 1, lvl: 2, def: [2, 3], icon: '🧤' });
 base('gauntlets', '鐵手套', 'Gauntlets', { slot: 'gloves', tier: 2, lvl: 20, def: [12, 16], icon: '🧤' });
+base('war_gauntlets', '戰神護手', 'War Gauntlets', { slot: 'gloves', tier: 3, lvl: 36, def: [28, 36], icon: '🧤' });
 base('boots', '皮靴', 'Boots', { slot: 'boots', tier: 1, lvl: 2, def: [2, 3], icon: '👢' });
 base('greaves', '鐵靴', 'Greaves', { slot: 'boots', tier: 2, lvl: 20, def: [12, 16], icon: '🥾' });
+base('war_boots', '戰神之靴', 'War Boots', { slot: 'boots', tier: 3, lvl: 36, def: [28, 36], icon: '🥾' });
 base('sash', '腰帶', 'Sash', { slot: 'belt', tier: 1, lvl: 2, def: [2, 3], icon: '🎗️' });
 base('war_belt', '戰鬥腰帶', 'War Belt', { slot: 'belt', tier: 2, lvl: 22, def: [12, 16], icon: '🎗️' });
+base('plated_belt', '板甲腰帶', 'Plated Belt', { slot: 'belt', tier: 3, lvl: 38, def: [28, 36], icon: '🎗️' });
 base('buckler', '小圓盾', 'Buckler', { slot: 'offhand', tier: 1, lvl: 1, def: [4, 6], block: 20, icon: '🛡️' });
 base('kite', '鳶形盾', 'Kite Shield', { slot: 'offhand', tier: 2, lvl: 16, def: [20, 28], block: 28, icon: '🛡️' });
 base('tower', '塔盾', 'Tower Shield', { slot: 'offhand', tier: 3, lvl: 32, def: [45, 60], block: 35, icon: '🛡️' });
@@ -166,10 +174,10 @@ export const STAT_NAMES = {
   edef: ['+{v}% 增強防禦', '+{v}% Enhanced Defence'], fres: ['火焰抗性 +{v}%', 'Fire Resist +{v}%'], cres: ['冰冷抗性 +{v}%', 'Cold Resist +{v}%'], lres: ['閃電抗性 +{v}%', 'Lightning Resist +{v}%'],
   allres: ['所有抗性 +{v}', 'All Resistances +{v}'], ls: ['{v}% 生命竊取', '{v}% Life Stolen per Hit'], fr: ['+{v}% 移動速度', '+{v}% Faster Run'], mf: ['+{v}% 尋獲魔法物品', '+{v}% Magic Find'],
   crit: ['{v}% 致命一擊', '{v}% Deadly Strike'], skills: ['+{v} 所有技能等級', '+{v} to All Skills'], fdmg: ['+{v} 火焰傷害', 'Adds {v} Fire Damage'], regen: ['每秒回復 {v} 生命', 'Replenish {v} Life a second'],
-  def: ['+{v} 防禦', '+{v} Defence'],
+  def: ['+{v} 防禦', '+{v} Defence'], dmgp: ['+{v}% 所有傷害', '+{v}% to All Damage'], thorns: ['反彈 {v} 傷害給攻擊者', 'Attacker Takes {v} Damage'], minion: ['+{v}% 召喚物力量', '+{v}% Summon Strength'],
 };
 // uniques: a fixed name on a base, fixed stats (ranges roll)
-export const UNIQUES = [
+const HAND_UNIQUES = [
   { id: 'gravecaller', base: 'short_sword', n: ['召墓者', 'Gravecaller'], st: { edmg: [80, 120], ls: [5, 7], life: [15, 25] } },
   { id: 'emberbite', base: 'hand_axe', n: ['餘燼之咬', 'Emberbite'], st: { edmg: [60, 90], fdmg: [8, 14], ias: [20, 20] } },
   { id: 'hollowhorn', base: 'short_bow', n: ['空角', 'Hollowhorn'], st: { edmg: [70, 110], dex: [8, 12], ias: [20, 20] } },
@@ -189,9 +197,14 @@ export const UNIQUES = [
   { id: 'meteorfall', base: 'elder_staff', n: ['隕落', 'Meteorfall'], st: { skills: [2, 3], fdmg: [30, 50], ene: [20, 30] }, lvl: 32 },
   { id: 'deadeye', base: 'war_bow', n: ['亡眼', 'Deadeye'], st: { edmg: [200, 260], dex: [20, 25], crit: [20, 30] }, lvl: 34 },
 ];
+// …and 482 more uniques and 100 sets made by itemgen.js
+export const { UNIQUES, SETS } = buildItems(B, HAND_UNIQUES);
+export const UNIQUE_BY_ID = Object.fromEntries(UNIQUES.map((u) => [u.id, u])), SET_BY_ID = Object.fromEntries(SETS.map((s) => [s.id, s]));
+// an item's own colour (uniques and sets), for the paper doll and the hero's model
+export const itemColor = (it) => (!it ? null : it.u ? (UNIQUE_BY_ID[it.u] || {}).col : it.set ? (SET_BY_ID[it.set] || {}).col : null);
 export const RARE_A = [['血', 'Blood'], ['惡夢', 'Doom'], ['靈魂', 'Soul'], ['風暴', 'Storm'], ['骨', 'Bone'], ['烏鴉', 'Raven'], ['龍', 'Dragon'], ['寒霜', 'Rime'], ['暗影', 'Shadow'], ['惡魔', 'Demon'], ['星', 'Star'], ['狼', 'Wolf']];
 export const RARE_B = [['之牙', 'Fang'], ['之心', 'Heart'], ['之冠', 'Crown'], ['之刃', 'Edge'], ['之握', 'Grip'], ['之紗', 'Veil'], ['之歌', 'Song'], ['之盾', 'Ward'], ['之眼', 'Eye'], ['之翼', 'Wing'], ['之爪', 'Claw'], ['之誓', 'Oath']];
-export const RARITY = { normal: { n: ['普通', 'Normal'], c: '#e8e8e8' }, magic: { n: ['魔法', 'Magic'], c: '#7a8aff' }, rare: { n: ['稀有', 'Rare'], c: '#ffe25a' }, unique: { n: ['暗金', 'Unique'], c: '#d8a84a' } };
+export const RARITY = { normal: { n: ['普通', 'Normal'], c: '#e8e8e8' }, magic: { n: ['魔法', 'Magic'], c: '#7a8aff' }, rare: { n: ['稀有', 'Rare'], c: '#ffe25a' }, unique: { n: ['暗金', 'Unique'], c: '#d8a84a' }, set: { n: ['套裝', 'Set'], c: '#3ade5a' } };
 export const POTIONS = {
   hp1: { n: ['小治療藥水', 'Minor Healing Potion'], icon: '🧪', heal: 60, price: 30, c: '#e8382a' }, hp2: { n: ['治療藥水', 'Healing Potion'], icon: '🧪', heal: 180, price: 120, c: '#e8382a', lvl: 12 }, hp3: { n: ['強效治療藥水', 'Greater Healing Potion'], icon: '🧪', heal: 450, price: 400, c: '#e8382a', lvl: 28 },
   mp1: { n: ['小法力藥水', 'Minor Mana Potion'], icon: '🧴', mana: 50, price: 30, c: '#3a6ae8' }, mp2: { n: ['法力藥水', 'Mana Potion'], icon: '🧴', mana: 140, price: 110, c: '#3a6ae8', lvl: 12 }, mp3: { n: ['強效法力藥水', 'Greater Mana Potion'], icon: '🧴', mana: 320, price: 360, c: '#3a6ae8', lvl: 28 },

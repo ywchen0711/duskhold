@@ -1,8 +1,8 @@
 // node tools/test.mjs: levels are connected, loot rolls sensibly, and fights are fair at every act and difficulty
 import { genLevel, genTown, field, walk, toT, FLOOR } from '../js/dungeon.js';
 import { rollItem, makeItem, rng, itemValue, potionFor } from '../js/loot.js';
-import { derive, attackDamage, spellDamage, hitChance, mobHitChance, takeDamage } from '../js/combat.js';
-import { CLASSES, SKILLS, SKILL_ORDER, TREES, MOBS, ACTS, mlvlOf, mobStats, BASES, UNIQUES, xpFor } from '../js/data.js';
+import { derive, setCount, attackDamage, spellDamage, hitChance, mobHitChance, takeDamage } from '../js/combat.js';
+import { CLASSES, SKILLS, SKILL_ORDER, TREES, MOBS, ACTS, mlvlOf, mobStats, BASES, UNIQUES, SETS, xpFor } from '../js/data.js';
 
 let fails = 0;
 const ok = (name, cond, info = '') => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}${info ? '  ' + info : ''}`); if (!cond) fails++; };
@@ -23,13 +23,23 @@ const ok = (name, cond, info = '') => { console.log(`${cond ? 'ok  ' : 'FAIL'} $
 }
 // 2. loot
 {
-  const r = rng(5), count = { normal: 0, magic: 0, rare: 0, unique: 0 }; let badName = 0;
+  const r = rng(5), count = { normal: 0, magic: 0, rare: 0, set: 0, unique: 0 }; let badName = 0;
   for (let i = 0; i < 20000; i++) { const it = rollItem(1 + (i % 50), 0, r); count[it.rar]++; if (!it.name || !it.name[0] || !it.name[1]) badName++; if (it.rar !== 'normal' && it.rar !== 'unique' && !Object.keys(it.st).length) badName++; }
   ok('drops: mostly plain and magic, some rare, a few unique', count.unique > 40 && count.unique < 500 && count.rare > 600 && count.magic > count.rare && badName === 0, JSON.stringify(count));
-  const mf = { normal: 0, magic: 0, rare: 0, unique: 0 }; for (let i = 0; i < 20000; i++) mf[rollItem(30, 200, r).rar]++;
+  const mf = { normal: 0, magic: 0, rare: 0, set: 0, unique: 0 }; for (let i = 0; i < 20000; i++) mf[rollItem(30, 200, r).rar]++;
   ok('magic find helps', mf.unique > count.unique && mf.rare > count.rare, JSON.stringify(mf));
-  const allU = UNIQUES.every((u) => { const it = makeItem(u.base, 'unique', 60, r); return it.u === u.id && it.name[0] === u.n[0]; });
-  ok('every unique can be made', allU, `${UNIQUES.length} uniques, ${Object.keys(BASES).length} bases`);
+  const allU = UNIQUES.every((u) => { const it = makeItem(u.base, 'unique', 60, r, u.id); return it.u === u.id && it.name[0] === u.n[0] && Object.keys(it.st).length >= 3; });
+  ok('500 uniques, all named differently, every one can be made', UNIQUES.length === 500 && new Set(UNIQUES.map((u) => u.n[0])).size === 500 && new Set(UNIQUES.map((u) => u.n[1])).size === 500 && allU, `${UNIQUES.length} uniques on ${Object.keys(BASES).length} bases`);
+  let badP = 0; for (const S of SETS) S.pieces.forEach((p, i) => { const it = makeItem(p.base, 'set', 60, r, S.id + ':' + i); if (it.set !== S.id || it.sp !== i || it.name[0] !== p.n[0]) badP++; });
+  const slotsOk = SETS.every((S) => new Set(S.pieces.map((p) => BASES[p.base].slot)).size === S.pieces.length && S.pieces.length >= 2 && S.pieces.length <= 6 && S.bonus[S.pieces.length]);
+  ok('100 sets of 2-6 pieces, one per slot, every piece can be made', SETS.length === 100 && new Set(SETS.map((S) => S.n[0])).size === 100 && badP === 0 && slotsOk, `${SETS.reduce((a, S) => a + S.pieces.length, 0)} pieces`);
+  // wearing a whole set turns on all its bonuses
+  const S = SETS.find((x) => x.pieces.length >= 4), equip = {};
+  S.pieces.forEach((p, i) => { const B = BASES[p.base]; equip[B.slot === 'ring' ? 'ring1' : B.slot] = makeItem(p.base, 'set', 60, r, S.id + ':' + i); });
+  const bare = derive({ cls: 'warrior', lvl: 60, alloc: {}, skills: {}, equip: {}, diff: 0 }), worn = derive({ cls: 'warrior', lvl: 60, alloc: {}, skills: {}, equip, diff: 0 });
+  ok('set bonuses count', setCount(equip)[S.id] === S.pieces.length && worn.life >= bare.life, `${S.n[0]}: ${S.pieces.length} pieces, life ${bare.life} -> ${worn.life}`);
+  const drops = { set: 0, unique: 0 }; for (let i = 0; i < 40000; i++) { const it = rollItem(10 + (i % 70), 0, r); if (it.rar in drops) drops[it.rar]++; }
+  ok('sets and uniques both drop', drops.set > 150 && drops.unique > 150, JSON.stringify(drops));
   ok('things are worth something', itemValue(makeItem('war_bow', 'rare', 40, r)) > itemValue(makeItem('short_bow', 'normal', 1, r)));
 }
 // 3. skills: 200 per class in five trees, every description fills in, every mechanic is one the game runs

@@ -1021,6 +1021,17 @@ function drink(kind) {
 }
 
 // ------------------------------------------------------------------ HUD
+// a monster's ailments as short coloured tags under its life bar, so you can see what is stunned, slowed or poisoned
+const FOE_ST = { stun: [['暈', 'STUN'], '#ffe25a'], slow: [['慢', 'SLOW'], '#8ad0ff'], poison: [['毒', 'PSN'], '#7aff5a'], amp: [['易傷', 'AMP'], '#ff8a6a'], weak: [['虛弱', 'WEAK'], '#c8a8ff'], leech: [['吸血', 'LEECH'], '#ff5a8a'], dot: [['凋零', 'WITHER'], '#b05aff'] };
+let foeStHtml = '';
+function foeStatus(m) {
+  const on = [], cu = m.cu || {};
+  if (m.stun > 0) on.push('stun');
+  if (m.slow > 0 || cu.slow) on.push('slow');
+  if (m.dots && m.dots.length) on.push('poison');
+  for (const k of ['amp', 'weak', 'leech', 'dot']) if (cu[k]) on.push(k);
+  return on.map((k) => `<span style="color:${FOE_ST[k][1]}">${tx(FOE_ST[k][0])}</span>`).join('');
+}
 function drawHud(force) {
   if (!started) return;
   const c = ch(), t = tr();
@@ -1043,7 +1054,10 @@ function drawHud(force) {
   if (force) for (const [k, el] of Object.entries(townTags)) el.textContent = k === 'cave' ? '⬇ ' + t.cave : k === 'stash' ? t.stashName : k === 'waypoint' ? t.waypoint : t[k];
   // the monster under the cursor
   const m = !isTouch ? mobAtScreen(mouse.x, mouse.y) || (me.target && me.target.alive ? me.target : null) : me.target && me.target.alive ? me.target : null;
+  const fs = m ? foeStatus(m) : ''; if (fs !== foeStHtml) $('foeSt').innerHTML = foeStHtml = fs;
   if (m) { $('foe').hidden = false; $('foeName').textContent = mobName(m); $('foeName').className = m.boss || m.unique ? 'uni' : m.champ ? 'champ' : ''; $('foeMods').textContent = m.mods.map((k) => tx(MODS[k].n)).join(' · ') || (m.minion ? t.minion : ''); $('foeFill').style.width = (m.hp / m.max * 100) + '%'; } else $('foe').hidden = true;
+  // the hero's own buffs step down below the monster panel instead of covering it
+  const bt = m ? $('foe').offsetTop + $('foe').offsetHeight + 4 + 'px' : ''; if ($('buffs').style.top !== bt) $('buffs').style.top = bt;
 }
 let miniC = null;
 function drawMini() {

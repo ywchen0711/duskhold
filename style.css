@@ -144,6 +144,10 @@ hr { border: 0; border-top: 1px solid rgba(232, 192, 112, .25); margin: 6px 0; }
 .tabs button small { color: var(--gold); }
 .sk { padding: 6px 10px; } .sk p { font-size: 12px; } .sk .ic { font-size: 26px; }
 .acts { max-width: 210px; }
+/* on a phone the skill buttons drop under the description instead of squeezing it to a few characters a line */
+@media (max-width: 560px) { .sk { grid-template-columns: auto 1fr; } .sk .acts { grid-column: 1 / -1; justify-self: end; max-width: none; } }
+/* on a phone the area name, the target bar and the buffs stay left of the minimap instead of running under it */
+@media (max-width: 560px) { #mini:not(.big) { width: 110px; height: 110px; } #area, #foe, #buffs { left: 10px; transform: none; max-width: calc(100vw - 136px); } #area { white-space: normal; font-size: 14px; } #foe { width: calc(100vw - 136px); } #buffs { justify-content: flex-start; } }
 .acts button { width: 28px; height: 28px; font-size: 12px; }
 #touchBtns { grid-template-columns: repeat(4, 54px); }
 #touchBtns button { width: 54px; height: 54px; }
